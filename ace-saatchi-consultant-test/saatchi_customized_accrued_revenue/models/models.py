@@ -22,7 +22,11 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
 
     ce_status = fields.Selection(
         
-        selection=[('Signed', 'Signed'),('Billable', 'Billable'),('Closed', 'Closed'),('Cancelled', 'Cancelled'), ('For Client Signature', 'For Client Signature')],  # placeholder, Odoo will infer from compute if needed
+        selection=[('for_client_signature', 'For Client Signature'),
+        ('signed', 'Signed'),
+        ('billable', 'Billable'),
+        ('closed', 'Closed'),
+        ('cancelled', 'Cancelled')],  # placeholder, Odoo will infer from compute if needed
         string="Status",
         compute="_compute_ce_fields",
         store=True,
@@ -55,7 +59,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
     journal_id = fields.Many2one(
         'account.journal',
         string="Journal",
-        default=lambda self: self.env['account.journal'].browse(11),
+        default=lambda self: self.env['account.journal'].browse(34),
     )
 
     accrual_account_id = fields.Many2one(
@@ -109,7 +113,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
     @api.depends('related_ce_id')
     def _compute_ce_code(self):
         for record in self:
-            record.ce_code = f'{record.related_ce_id.x_studio_ce_code.name}{record.related_ce_id.name[1:]}'
+            record.ce_code = f'{record.related_ce_id.x_ce_code}{record.related_ce_id.name[1:]}'
     @api.depends('related_accrued_entry.state', 'related_reverse_accrued_entry.state')
     def _compute_state(self):
         for record in self:
@@ -171,7 +175,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         for rec in self:
             if rec.related_ce_id:
                 rec.ce_partner_id = rec.related_ce_id.partner_id.id or False
-                rec.ce_status = rec.related_ce_id.x_studio_ce_status or False
+                rec.ce_status = rec.related_ce_id.x_ce_status or False
                 rec.ce_job_description = rec.related_ce_id.x_studio_job_description or False
             else:
                 rec.ce_partner_id = False
@@ -248,11 +252,11 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
     def sync_new_records_for_accrual(self):
         ce_records = self.env['sale.order'].search([
             ('state', '=', 'sale'), 
-            ('x_studio_ce_status', 'in', ['Signed', 'Billable'])
+            ('x_ce_status', 'in', ['signed', 'billable'])
         ])
-        
+
         total_success = 0
-        
+
         for ce in ce_records:
             state = ce.action_create_custom_accrued_revenue()
             if state:

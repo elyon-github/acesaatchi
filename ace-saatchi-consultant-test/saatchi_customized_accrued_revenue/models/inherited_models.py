@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 from odoo import models, fields, api
 from odoo.exceptions import UserError
+import logging
 
-
+_logger = logging.getLogger(__name__)
 
 class SaleOrder(models.Model):
     _inherit="sale.order"
@@ -12,6 +13,19 @@ class SaleOrder(models.Model):
         string="Foreign Currency",
         default=lambda self: self.env.ref('base.USD')
     )
+
+
+
+    x_ce_status = fields.Selection([
+        ('for_client_signature', 'For Client Signature'),
+        ('signed', 'Signed'),
+        ('billable', 'Billable'),
+        ('closed', 'Closed'),
+        ('cancelled', 'Cancelled')
+
+    ], default='for_client_signature', required=True, string='C.E. Status')
+
+    x_ce_code = fields.Char(string="CE Code")
     
     custom_exchange_rate = fields.Float(
         string="Foreign Currency Exchange Rate",
@@ -85,7 +99,7 @@ class SaleOrder(models.Model):
     def action_create_custom_accrued_revenue(self, is_override=False):
         """Create a new accrued revenue entry for this sale order"""
         if not is_override:
-            if self.state != 'sale' or self.x_studio_ce_status not in ['Signed', 'Billable']:
+            if self.state != 'sale' or self.x_ce_status not in ['signed', 'billable']:
                 return False
         
         # Create the accrued revenue record
@@ -99,20 +113,22 @@ class SaleOrder(models.Model):
         process_lines = False  # Flag to track if we're in the Agency section
         
         for line in self.order_line:
+
+
+
             # Check if this is a section line
-            if line.display_type == 'line_section':
-                # Check if this is the Agency Charges section
-                if line.name == 'Agency Charges':
-                    process_lines = True
-                else:
-                    # This is a different section (Non-Agency, etc.), stop processing
-                    process_lines = False
-                continue  # Skip the section line itself
-                
             # Skip line notes and other display types
             if line.display_type:
                 continue
-                
+
+            
+            if self._is_agency_charges_category(line.product_template_id):
+                process_lines = True
+            else:
+                # This is a different section (Non-Agency, etc.), stop processing
+                process_lines = False
+
+            
             # Only process lines if we're in the Agency section
             if process_lines:
                 # Calculate accrued quantity (delivered but not invoiced)
@@ -157,6 +173,21 @@ class SaleOrder(models.Model):
         accrued_revenue.write({'ce_original_total_amount': total_eligible_for_accrue})
         
         return True
+
+    def _is_agency_charges_category(self, product):
+        """Check if product belongs to Agency Charges category or its children"""
+        _logger.info('ehs')
+        if not product or not product.categ_id:
+            return False
+        # Check current category and all parents
+        current_categ = product.categ_id
+        while current_categ:
+            
+            if current_categ.name.lower() == 'agency charges':
+                return True
+            current_categ = current_categ.parent_id
+        
+        return False
 
 
 class AccountMove(models.Model):
