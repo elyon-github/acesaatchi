@@ -11,6 +11,7 @@ _logger = logging.getLogger(__name__)
 class SaatchiXLSX(models.AbstractModel):
     _name = 'report.saatchi_soa_xlsx'
     _inherit = 'report.report_xlsx.abstract'
+    _description ='xlsx.report'
 
     def _define_formats(self, workbook):
         """Define and return format objects."""
@@ -335,7 +336,7 @@ class SaatchiXLSX(models.AbstractModel):
                     inv_date = move.invoice_date or move.date
                     
                     # Write row data
-                    sheet.write(row, 0, '', formats['normal'])  # PO# - blank for now
+                    sheet.write(row, 0, move.ref, formats['normal'])  # PO# - blank for now
                     sheet.write(row, 1, '', formats['normal'])  # CE# - blank for now
                     sheet.write(row, 2, move.partner_id.ref or '', formats['normal'])  # METROBANK
                     sheet.write(row, 3, move.invoice_origin or move.ref or '', formats['centered'])  # Project Title

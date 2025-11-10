@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 {
-    'name': "saatchi_soa",
+    'name': "Saatchi XLSX Reports",
 
     'summary': "Short (1 phrase/line) summary of the module's purpose",
 
@@ -8,8 +8,8 @@
 Long description of module's purpose
     """,
 
-    'author': "My Company",
-    'website': "https://www.yourcompany.com",
+    'author': "Mark Angelo S. Templanza / Elyon IT Consultant",
+    'website': "https://www.elyon-solutions.com/",
 
     # Categories can be used to filter modules in modules listing
     # Check https://github.com/odoo/odoo/blob/15.0/odoo/addons/base/data/ir_module_category_data.xml
