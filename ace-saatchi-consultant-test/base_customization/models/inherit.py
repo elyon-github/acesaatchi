@@ -11,7 +11,7 @@ class InheritSaleOrder(models.Model):
     )
 
     x_job_description = fields.Char('Job Description')
-    x_ce_code = fields.Char(compute="_compute_x_ce_code", string="Client CE Code")
+    x_ce_code = fields.Char(compute="_compute_x_ce_code", string="Client CE Code", store=True)
 
 
 
@@ -104,7 +104,7 @@ class InheritSaleOrder(models.Model):
 
 
 
-    
+    @api.depends('x_client_product_ce_code.x_ce_product_code')
     def _compute_x_ce_code(self):
         for record in self:
             if record.x_client_product_ce_code:
@@ -428,10 +428,10 @@ class AccountMove(models.Model):
     def _compute_related_so(self):
         for record in self:
             record.x_related_so = False
-            for line in record.invoice_line_ids:
-                if line.sale_line_ids:
-                    related_so = line.sale_line_ids[0].order_id
-                    record.x_related_so = related_so
+            # for line in record.invoice_line_ids:
+            #     if line.sale_line_ids:
+            sale_order = record.invoice_line_ids.mapped('sale_line_ids.order_id')[:1] if record.invoice_line_ids else False
+            record.x_related_so = sale_order
                 
                 
     def _apply_alt_currency_conversion(self):
@@ -495,3 +495,98 @@ class AccountMoveLine(models.Model):
         help="Unit price in foreign exchange currency"
     )
 
+
+class PurchaseOrder(models.Model):
+    _inherit = 'purchase.order'
+        
+    def get_button_approvers(self):
+        """
+        Returns the approvers configured in Studio approval button
+        :return: recordset of res.users
+        """
+        self.ensure_one()
+        
+        approvers = self.env['res.users']
+        
+        # Method 1: Get from approval entries (if approval process has started)
+        try:
+            entries = self.env['studio.approval.entry'].search([
+                ('res_id', '=', self.id),
+                ('model', '=', 'purchase.order')
+            ])
+            if entries:
+                approvers = entries.mapped('user_id')
+                if approvers:
+                    return approvers
+        except:
+            pass
+        
+        # Method 2: Get from approval rules configuration
+        try:
+            # Get the model record for purchase.order
+            model_rec = self.env['ir.model'].search([
+                ('model', '=', 'purchase.order')
+            ], limit=1)
+            
+            if model_rec:
+                # Find applicable approval rules
+                rules = self.env['studio.approval.rule'].search([
+                    ('model_id', '=', model_rec.id),
+                    ('active', '=', True)
+                ])
+                
+                for rule in rules:
+                    # Check if rule applies to this record based on domain
+                    if rule.domain:
+                        try:
+                            from odoo.tools.safe_eval import safe_eval
+                            domain = safe_eval(rule.domain)
+                            # Check if this record matches the domain
+                            matching = self.search(domain + [('id', '=', self.id)])
+                            if not matching:
+                                continue
+                        except Exception as e:
+                            _logger.warning(f"Error evaluating domain for rule {rule.id}: {e}")
+                            continue
+                    
+                    # Get approvers from the rule via studio.approval.rule.approver
+                    rule_approvers = self.env['studio.approval.rule.approver'].search([
+                        ('rule_id', '=', rule.id)
+                    ])
+                    
+                    for rule_approver in rule_approvers:
+                        if rule_approver.user_id:
+                            approvers |= rule_approver.user_id
+                        if hasattr(rule_approver, 'group_id') and rule_approver.group_id:
+                            approvers |= rule_approver.group_id.users
+                            
+        except Exception as e:
+            import logging
+            _logger = logging.getLogger(__name__)
+            _logger.warning(f"Could not fetch approval rules: {e}")
+        
+        return approvers
+
+
+
+class HrLeave(models.Model):
+    _inherit = 'hr.leave'
+
+
+    def _get_responsible_for_approval(self):
+        self.ensure_one()
+        responsible = self.env['res.users']
+        
+        # SWAP: HR OFFICER FIRST (confirm state)
+        if self.validation_type == 'hr' or (self.validation_type == 'both' and self.state == 'confirm'):
+            if self.holiday_status_id.responsible_ids:
+                responsible = self.holiday_status_id.responsible_ids
+        
+        # SWAP: MANAGER SECOND (validate1 state)
+        elif self.validation_type == 'manager' or (self.validation_type == 'both' and self.state == 'validate1'):
+            if self.employee_id.leave_manager_id:
+                responsible = self.employee_id.leave_manager_id
+            elif self.employee_id.parent_id.user_id:
+                responsible = self.employee_id.parent_id.user_id
+        
+        return responsible

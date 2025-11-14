@@ -129,7 +129,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         default=lambda self: self.env.company
     )
 
-    @api.depends('related_ce_id')
+    @api.depends('related_ce_id', 'related_ce_id.x_ce_code')
     def _compute_ce_code(self):
         for record in self:
             if record.related_ce_id:
@@ -536,6 +536,16 @@ class SaatchiCustomizedAccruedRevenueLines(models.Model):
         string="Analytic Precision",
         compute="_compute_analytic_precision",
         readonly=True
+    )
+
+    state = fields.Selection(
+        [
+            ('draft', 'Draft'),
+            ('accrued', 'Accrued'),
+            ('reversed', 'Reversed'),
+            ('cancel', 'cancelled')
+        ],
+        related="accrued_revenue_id.state"
     )
 
     @api.model_create_multi

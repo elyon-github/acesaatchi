@@ -22,7 +22,7 @@ class SaleOrder(models.Model):
 
     ], default='for_client_signature', required=True, string='C.E. Status', tracking=True)
 
-
+    x_job_number = fields.Char(string="Job Number")
 
     @api.model
     def collect_potential_accruals(self, accrual_date, reversal_date):
@@ -80,94 +80,106 @@ class SaleOrder(models.Model):
     #     return created_count
 
     def action_create_custom_accrued_revenue(self, is_override=False, accrual_date=False, reversal_date=False):
-        """Create a new accrued revenue entry for this sale order"""
-        self.ensure_one()
-
-        # Validate sale order state (skip validation if override is True)
-        if not is_override:
-            if self.state != 'sale' or self.x_ce_status not in ['signed', 'billable']:
-                _logger.warning(f"SO {self.name} does not meet accrual criteria")
-                return False
-        
-        # Create the accrued revenue record
-        accrued_revenue = self.env['saatchi.accrued_revenue'].create({
-            'related_ce_id': self.id,
-            'currency_id': self.currency_id.id,
-            'date': accrual_date,
-            'reversal_date': reversal_date
-        })
-        
-        # Create lines for each sale order line, but only for Agency Charges
-        total_eligible_for_accrue = 0
-        lines_created = 0
-        
-        for line in self.order_line:
-            # Skip display type lines (section headers, notes, etc.)
-            if line.display_type:
-                continue
+            """Create a new accrued revenue entry for this sale order"""
+            self.ensure_one()
+    
+            # Validate sale order state (skip validation if override is True)
+            if not is_override:
+                if self.state != 'sale' or self.x_ce_status not in ['signed', 'billable']:
+                    _logger.warning(f"SO {self.name} does not meet accrual criteria")
+                    return False
+    
+            # Use default dates if not provided
+            if not accrual_date:
+                accrual_date = self.env['saatchi.accrued_revenue.wizard']._default_accrual_date()
+            if not reversal_date:
+                reversal_date = self.env['saatchi.accrued_revenue.wizard']._default_reversal_date()
+    
+    
             
-            # Only process lines from Agency Charges category
-            if not self._is_agency_charges_category(line.product_template_id):
-                continue
-            
-            # Calculate accrued quantity (delivered but not invoiced)
-            accrued_qty = line.product_uom_qty - line.qty_invoiced
-            
-            # Skip if nothing to accrue
-            if accrued_qty <= 0:
-                continue
-            
-            # Calculate accrued amount
-            accrued_amount = accrued_qty * line.price_unit
-            
-            # Get analytic distribution from sale order line
-            analytic_distribution = line.analytic_distribution or {}
-            
-            # If no analytic distribution on line, try to get from sale order
-            if not analytic_distribution and hasattr(self, 'analytic_distribution') and self.analytic_distribution:
-                analytic_distribution = self.analytic_distribution
-            
-            # Get income account
-            income_account = line.product_id.property_account_income_id or \
-                           line.product_id.categ_id.property_account_income_categ_id
-            
-            if not income_account:
-                _logger.warning(f"No income account found for line {line.name} in SO {self.name}")
-                continue
-            
-            # Create accrual line
-            self.env['saatchi.accrued_revenue_lines'].create({
-                'accrued_revenue_id': accrued_revenue.id,
-                'ce_line_id': line.id,
-                'account_id': income_account.id,
-                'label': f'{self.name} - {line.name}',
-                'credit': accrued_amount,
-                'currency_id': line.currency_id.id,
-                'analytic_distribution': analytic_distribution,
+            # Create the accrued revenue record
+            accrued_revenue = self.env['saatchi.accrued_revenue'].create({
+                'related_ce_id': self.id,
+                'currency_id': self.currency_id.id,
+                'date': accrual_date,
+                'reversal_date': reversal_date
             })
             
-            total_eligible_for_accrue += accrued_amount
-            lines_created += 1
-        
-        # If no lines were created, delete the accrued revenue and return False
-        if lines_created == 0:
-            accrued_revenue.unlink()
-            _logger.warning(f"No eligible lines found for accrual in SO {self.name}")
-            return False
-        
-        # Create the total line (debit side)
-        self.env['saatchi.accrued_revenue_lines'].create({
-            'accrued_revenue_id': accrued_revenue.id,
-            'label': 'Total Accrued',
-            'currency_id': self.currency_id.id,
-        })
-        
-        # Update the original total amount
-        accrued_revenue.write({'ce_original_total_amount': total_eligible_for_accrue})
-        
-        _logger.info(f"Created accrual for SO {self.name} with {lines_created} lines, total: {total_eligible_for_accrue}")
-        
-        return True
+            # Create lines for each sale order line, but only for Agency Charges
+            total_eligible_for_accrue = 0
+            lines_created = 0
+            
+            for line in self.order_line:
+                # Skip display type lines (section headers, notes, etc.)
+                if line.display_type:
+                    continue
+                
+                # Only process lines from Agency Charges category
+                if not self._is_agency_charges_category(line.product_template_id):
+                    continue
+                
+                # Calculate accrued quantity (delivered but not invoiced)
+                accrued_qty = line.product_uom_qty - line.qty_invoiced
+                
+                # Skip if nothing to accrue
+                if accrued_qty <= 0:
+                    continue
+                
+                # Calculate accrued amount
+                accrued_amount = accrued_qty * line.price_unit
+                
+                # Get analytic distribution from sale order line
+                analytic_distribution = line.analytic_distribution or {}
+                
+                # If no analytic distribution on line, try to get from sale order
+                if not analytic_distribution and hasattr(self, 'analytic_distribution') and self.analytic_distribution:
+                    analytic_distribution = self.analytic_distribution
+                
+                # Get income account
+                income_account = line.product_id.property_account_income_id or \
+                               line.product_id.categ_id.property_account_income_categ_id
+                
+                if not income_account:
+                    _logger.warning(f"No income account found for line {line.name} in SO {self.name}")
+                    continue
+                
+                # Create accrual line
+                self.env['saatchi.accrued_revenue_lines'].create({
+                    'accrued_revenue_id': accrued_revenue.id,
+                    'ce_line_id': line.id,
+                    'account_id': income_account.id,
+                    'label': f'{self.name} - {line.name}',
+                    'credit': accrued_amount,
+                    'currency_id': line.currency_id.id,
+                    'analytic_distribution': analytic_distribution,
+                })
+                
+                total_eligible_for_accrue += accrued_amount
+                lines_created += 1
+            
+            # If no lines were created, delete the accrued revenue and return False
+            if lines_created == 0:
+                accrued_revenue.unlink()
+                _logger.warning(f"No eligible lines found for accrual in SO {self.name}")
+                return False
+            
+            # Create the total line (debit side)
+            self.env['saatchi.accrued_revenue_lines'].create({
+                'accrued_revenue_id': accrued_revenue.id,
+                'label': 'Total Accrued',
+                'currency_id': self.currency_id.id,
+            })
+            
+            # Update the original total amount
+            accrued_revenue.write({'ce_original_total_amount': total_eligible_for_accrue})
+            
+            _logger.info(f"Created accrual for SO {self.name} with {lines_created} lines, total: {total_eligible_for_accrue}")
+            
+            # If override is True, return the accrued revenue ID
+            if is_override:
+                return accrued_revenue.id
+            
+            return True
 
     def _is_agency_charges_category(self, product):
         """Check if product belongs to Agency Charges category or its children"""
