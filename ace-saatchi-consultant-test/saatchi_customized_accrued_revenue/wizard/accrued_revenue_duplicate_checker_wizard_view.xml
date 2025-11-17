@@ -28,7 +28,7 @@
                                     <field name="sale_order_id" readonly="1"/>
                                     <field name="partner_id" readonly="1"/>
                                     <field name="ce_code" readonly="1"/>
-                                    <field name="amount_total" readonly="1"/>
+                                    <field name="amount_total" readonly="1" sum="Total For Accrue"/>
                                     <field name="currency_id" readonly="1" column_invisible="1"/>
                                     <field name="has_existing_accrual" 
                                            readonly="1" 

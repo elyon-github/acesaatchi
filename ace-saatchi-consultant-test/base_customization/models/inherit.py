@@ -4,14 +4,14 @@ from odoo.exceptions import UserError, ValidationError
 class InheritSaleOrder(models.Model):
     _inherit = 'sale.order'
     
-    x_client_product_ce_code = fields.One2many(
-        'base_customization.sale_order_ce_line',  # Use the NEW separate model
-        'sale_order_id',
+    x_client_product_ce_code = fields.Many2one(
+        'base_customization.client_product_ce_co_line',  # Use the NEW separate model
         string="Client - Product CE Code"
     )
 
     x_job_description = fields.Char('Job Description')
     x_ce_code = fields.Char(compute="_compute_x_ce_code", string="Client CE Code", store=True)
+    # x_ce_code = fields.Char( string="Client CE Code", store=True)
 
 
 
@@ -104,11 +104,11 @@ class InheritSaleOrder(models.Model):
 
 
 
-    @api.depends('x_client_product_ce_code.x_ce_product_code')
+    @api.depends('x_client_product_ce_code')
     def _compute_x_ce_code(self):
         for record in self:
             if record.x_client_product_ce_code:
-                ce_code = f'{record.x_client_product_ce_code[0].x_ce_product_code}{record.name}'
+                ce_code = f'{record.x_client_product_ce_code.x_ce_product_code}{record.name}'
                 record.x_ce_code = ce_code
             else:
                 record.x_ce_code = ''

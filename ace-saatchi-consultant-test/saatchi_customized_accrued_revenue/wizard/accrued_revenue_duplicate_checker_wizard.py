@@ -137,7 +137,6 @@ class SaatchiAccruedRevenueWizardLine(models.TransientModel):
     amount_total = fields.Monetary(
         string="For Accrue Amount",
         readonly=True,
-        compute="_compute_amount_total"
     )
     
     currency_id = fields.Many2one(
@@ -165,21 +164,8 @@ class SaatchiAccruedRevenueWizardLine(models.TransientModel):
         default=False,
         help="Check to create another accrual for this sale order (this will be a duplicate)"
     )
-    @api.depends('sale_order_id', 'wizard_id.accrual_date', 'wizard_id.reversal_date')
-    def _compute_amount_total(self):
-        for wizard_line in self:
-            wizard_line['amount_total'] = 0
-            for line in wizard_line.sale_order_id.order_line:
-                if line.display_type:
-                    continue
-                
-                # Only process lines from Agency Charges category
-                if not wizard_line.sale_order_id._is_agency_charges_category(line.product_template_id):
-                    continue
-                    
-                accrued_qty = line.product_uom_qty - line.qty_invoiced
-                accrued_amount = accrued_qty * line.price_unit
-                wizard_line['amount_total'] += accrued_amount  # ✅ ACCUMULATES
+    
+
             
             
     @api.depends('sale_order_id', 'wizard_id.accrual_date', 'wizard_id.reversal_date')

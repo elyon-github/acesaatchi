@@ -295,13 +295,29 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         
         # Create wizard lines for all potential SOs
         for so in potential_sos:
+            amount_total = 0
+            for line in so.order_line:
+                if line.display_type:
+                    continue
+                
+                # Only process lines from Agency Charges category
+                if not so._is_agency_charges_category(line.product_template_id):
+                    continue
+                    
+                accrued_qty = line.product_uom_qty - line.qty_invoiced
+                accrued_amount = accrued_qty * line.price_unit
+                amount_total += accrued_amount  # ✅ ACCUMULATES
+                
+                    
             has_duplicate = so in duplicate_sos
-            self.env['saatchi.accrued_revenue.wizard.line'].create({
-                'wizard_id': wizard.id,
-                'sale_order_id': so.id,
-                'has_existing_accrual': has_duplicate,
-                'create_accrual': not has_duplicate,  # Default: only check new ones
-            })
+            if amount_total:
+                self.env['saatchi.accrued_revenue.wizard.line'].create({
+                    'wizard_id': wizard.id,
+                    'sale_order_id': so.id,
+                    'has_existing_accrual': has_duplicate,
+                    'amount_total': amount_total,
+                    'create_accrual': not has_duplicate,  # Default: only check new ones
+                })
         name = 'Generate Accrued Revenues - Duplicates Found' if duplicate_sos else 'Generate Accrued Revenues'
         
         return {
