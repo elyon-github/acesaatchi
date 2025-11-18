@@ -69,14 +69,9 @@
       <field name="model">sale.order</field>
       <field name="inherit_id" ref="sale.view_order_form"/>
       <field name="arch" type="xml">
-        
+
         <xpath expr="//field[@name='partner_id']" position="after">
-          <field name="x_client_product_ce_code" readonly="state in ['sale', 'cancel']">
-            <list editable="bottom">
-              <field name="x_product_id"/>
-              <field name="x_ce_product_code"/>
-            </list>
-          </field>
+            <field name="x_client_product_ce_code" options="{'no_create': True}" readonly="state in ['cancel', 'sale']" domain="[('x_client_product_ce_co_id.x_partner_id', '=', partner_id)]"/>
         </xpath>
         <xpath expr="//field[@name='payment_term_id']" position="after">
           <field name="x_alt_currency_id" options="{'no_create': True}" readonly="state in ['cancel', 'sale']"/>
@@ -96,6 +91,7 @@
         <field name="inherit_id" ref="purchase.purchase_order_form"/>
         <field name="arch" type="xml">
             <xpath expr="//button[@name='action_purchase_history']" position="after">
+                
                 <field name="currency_id" column_invisible="1"/>
                 <field name="fx_price_unit" optional="show"/>
                 <field name="fx_currency_id" optional="show" readonly="1"/>
@@ -147,6 +143,7 @@
           </xpath>
 
             <xpath expr="//field[@name='tax_totals']" position="after">
+                <br/>
                 <div class="o_sale_total o_alt_currency_total mt-2" name="alt_currency_section" invisible="not x_alt_currency_amount">
                     <div class="d-flex justify-content-between align-items-center mb-1">
                         <span class="fw-bold text-muted">Alt Currency:</span>

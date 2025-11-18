@@ -1,53 +1,166 @@
 # -*- coding: utf-8 -*-
-from odoo import models, fields, api
+"""
+Inherited Model Extensions for Accrued Revenue
+===============================================
+Extends sale.order, account.move, account.move.line, and
+account.general.ledger.report.handler to support accrued revenue functionality.
+"""
+
+from odoo import models, fields, api, _, Command
 from odoo.exceptions import UserError
-import logging
-from dateutil.relativedelta import relativedelta
 from odoo.tools import SQL
+from dateutil.relativedelta import relativedelta
+import logging
+
 _logger = logging.getLogger(__name__)
-import re
+
 
 class SaleOrder(models.Model):
-    _inherit="sale.order"
+    """
+    Sale Order Extension
+    
+    Adds custom fields and methods for:
+    - CE status tracking
+    - Approved estimates and invoiced amounts (billing & revenue)
+    - Variance calculations
+    - Accrual creation logic (normal, override, adjustment)
+    """
+    _inherit = "sale.order"
+    
+    # ========== Custom CE Fields ==========
+    x_ce_status = fields.Selection(
+        [
+            ('for_client_signature', 'For Client Signature'),
+            ('signed', 'Signed'),
+            ('billable', 'Billable'),
+            ('closed', 'Closed'),
+            ('cancelled', 'Cancelled')
+        ],
+        default='for_client_signature',
+        required=True,
+        string='C.E. Status',
+        tracking=True
+    )
 
+    x_job_number = fields.Char(
+        string="Job Number"
+    )
 
+    # ========== Financial Tracking Fields ==========
+    x_ce_approved_estimate_billing = fields.Monetary(
+        string="Approved Estimate | Billing",
+        currency_field="currency_id",
+        store=True,
+        compute="_compute_x_ce_amounts",
+        help="Total approved estimate for billing (all lines)"
+    )
+    
+    x_ce_approved_estimate_revenue = fields.Monetary(
+        string="Approved Estimate | Revenue",
+        currency_field="currency_id",
+        store=True,
+        compute="_compute_x_ce_amounts",
+        help="Total approved estimate for revenue (Agency Charges only)"
+    )
+    
+    x_ce_invoiced_billing = fields.Monetary(
+        string="Invoiced | Billing",
+        currency_field="currency_id",
+        store=True,
+        compute="_compute_x_ce_amounts",
+        help="Total invoiced amount for billing (all lines)"
+    )
+    
+    x_ce_invoiced_revenue = fields.Monetary(
+        string="Invoiced | Revenue",
+        currency_field="currency_id",
+        store=True,
+        compute="_compute_x_ce_amounts",
+        help="Total invoiced amount for revenue (Agency Charges only)"
+    )
+    
+    x_ce_variance_billing = fields.Monetary(
+        string="Variance | Billing",
+        currency_field="currency_id",
+        store=True,
+        compute="_compute_x_ce_amounts",
+        help="Difference between approved estimate and invoiced (billing)"
+    )
+    
+    x_ce_variance_revenue = fields.Monetary(
+        string="Variance | Revenue",
+        currency_field="currency_id",
+        store=True,
+        compute="_compute_x_ce_amounts",
+        help="Difference between approved estimate and invoiced (revenue) - eligible for accrual"
+    )
 
+    # ========== Compute Methods ==========
+    
+    @api.depends(
+        'order_line.price_subtotal',
+        'order_line.qty_invoiced',
+        'order_line.price_unit',
+    )
+    def _compute_x_ce_amounts(self):
+        """
+        Compute approved estimates, invoiced amounts, and variances
+        
+        Logic:
+        - BILLING: All lines included
+        - REVENUE: Only Agency Charges category lines included
+        - VARIANCE: Approved Estimate - Invoiced
+        """
+        for record in self:
+            approved_estimate_billing = 0
+            approved_estimate_revenue = 0
+            invoiced_billing = 0
+            invoiced_revenue = 0
+            
+            for line in record.order_line:
+                approved_estimate_billing += line.price_subtotal
+                invoiced_billing += line.qty_invoiced * line.price_unit
+                
+                if record._is_agency_charges_category(line.product_template_id):
+                    approved_estimate_revenue += line.price_subtotal
+                    invoiced_revenue += line.qty_invoiced * line.price_unit
+            
+            record.x_ce_approved_estimate_billing = approved_estimate_billing
+            record.x_ce_approved_estimate_revenue = approved_estimate_revenue
+            record.x_ce_invoiced_billing = invoiced_billing
+            record.x_ce_invoiced_revenue = invoiced_revenue
+            record.x_ce_variance_billing = approved_estimate_billing - invoiced_billing
+            record.x_ce_variance_revenue = approved_estimate_revenue - invoiced_revenue
 
-    x_ce_status = fields.Selection([
-        ('for_client_signature', 'For Client Signature'),
-        ('signed', 'Signed'),
-        ('billable', 'Billable'),
-        ('closed', 'Closed'),
-        ('cancelled', 'Cancelled')
-
-    ], default='for_client_signature', required=True, string='C.E. Status', tracking=True)
-
-    x_job_number = fields.Char(string="Job Number")
-
+    # ========== Accrual Collection Methods ==========
+    
     @api.model
     def collect_potential_accruals(self, accrual_date, reversal_date):
         """
-        Collect sale orders eligible for accrual creation.
-        Returns two recordsets:
-        - potential: All SOs that meet criteria (state=sale, status=signed/billable)
-        - duplicates: SOs that already have accruals in this period
+        Collect sale orders eligible for accrual creation
+        
+        Criteria:
+        - state = 'sale'
+        - x_ce_status in ['signed', 'billable']
+        
+        Args:
+            accrual_date: Accrual period start date
+            reversal_date: Accrual period end date
+        
+        Returns:
+            tuple: (potential_sos, duplicate_sos)
         """
-        reversal_date = accrual_date + relativedelta(months=1) - relativedelta(days=1)
         potential = self.env['sale.order']
         duplicates = self.env['sale.order']
 
-        # Find all eligible sale orders
         eligible_sos = self.search([
             ('state', '=', 'sale'),
             ('x_ce_status', 'in', ['signed', 'billable'])
         ])
         
-        # Check each SO for existing accruals in this period
         for so in eligible_sos:
-            # Add to potential list (all eligible SOs)
             potential |= so
             
-            # Check if it already has accruals in this period
             existing = self.env['saatchi.accrued_revenue'].search([
                 ('related_ce_id', '=', so.id),
                 ('date', '>=', accrual_date),
@@ -60,133 +173,298 @@ class SaleOrder(models.Model):
 
         return potential, duplicates
 
-    # Deprecated
-    # @api.model
-    # def create_accruals_for_sos(self, sos_list, is_override=False):
-    #     """
-    #     Create accruals for a list of sale orders.
-    #     Returns the count of successfully created accruals.
-    #     """
-    #     created_count = 0
-    #     for so in sos_list:
-    #         try:
-    #             result = so.action_create_custom_accrued_revenue(is_override=is_override)
-    #             if result:
-    #                 created_count += 1
-    #         except Exception as e:
-    #             _logger.error(f"Failed to create accrual for SO {so.name}: {e}")
-    #             continue
+    # ========== Wizard Action Methods ==========
+    
+    def action_open_wizard_create_accrued_revenue(self, records, special_case=False):
+        """
+        Open wizard to create accrued revenue for selected sale orders
         
-    #     return created_count
-
-    def action_create_custom_accrued_revenue(self, is_override=False, accrual_date=False, reversal_date=False):
-            """Create a new accrued revenue entry for this sale order"""
-            self.ensure_one()
-    
-            # Validate sale order state (skip validation if override is True)
-            if not is_override:
-                if self.state != 'sale' or self.x_ce_status not in ['signed', 'billable']:
-                    _logger.warning(f"SO {self.name} does not meet accrual criteria")
-                    return False
-    
-            # Use default dates if not provided
-            if not accrual_date:
-                accrual_date = self.env['saatchi.accrued_revenue.wizard']._default_accrual_date()
-            if not reversal_date:
-                reversal_date = self.env['saatchi.accrued_revenue.wizard']._default_reversal_date()
-    
-    
-            
-            # Create the accrued revenue record
-            accrued_revenue = self.env['saatchi.accrued_revenue'].create({
-                'related_ce_id': self.id,
-                'currency_id': self.currency_id.id,
-                'date': accrual_date,
-                'reversal_date': reversal_date
-            })
-            
-            # Create lines for each sale order line, but only for Agency Charges
-            total_eligible_for_accrue = 0
-            lines_created = 0
-            
-            for line in self.order_line:
-                # Skip display type lines (section headers, notes, etc.)
-                if line.display_type:
-                    continue
+        Args:
+            records: Sale order recordset
+            special_case: If True, enables scenario selection (Manual/Cancel/Adjustment)
+        
+        Returns:
+            dict: Action to open wizard
+        """
+        accrual_date = self.env['saatchi.accrued_revenue']._default_accrual_date()
+        reversal_date = self.env['saatchi.accrued_revenue']._default_reversal_date()
+        
+        wizard = self.env['saatchi.accrued_revenue.wizard'].create({
+            'accrual_date': accrual_date,
+            'reversal_date': reversal_date,
+            'special_case_mode': special_case,
+        })
+        
+        for record in records:
+            if (record.x_ce_variance_revenue > 0 or special_case) and record.state == 'sale':
+                existing = self.env['saatchi.accrued_revenue'].search([
+                    ('related_ce_id', '=', record.id),
+                    ('date', '>=', accrual_date),
+                    ('date', '<=', reversal_date),
+                    ('state', 'in', ['draft', 'accrued'])
+                ])
                 
-                # Only process lines from Agency Charges category
-                if not self._is_agency_charges_category(line.product_template_id):
-                    continue
-                
-                # Calculate accrued quantity (delivered but not invoiced)
-                accrued_qty = line.product_uom_qty - line.qty_invoiced
-                
-                # Skip if nothing to accrue
-                if accrued_qty <= 0:
-                    continue
-                
-                # Calculate accrued amount
-                accrued_amount = accrued_qty * line.price_unit
-                
-                # Get analytic distribution from sale order line
-                analytic_distribution = line.analytic_distribution or {}
-                
-                # If no analytic distribution on line, try to get from sale order
-                if not analytic_distribution and hasattr(self, 'analytic_distribution') and self.analytic_distribution:
-                    analytic_distribution = self.analytic_distribution
-                
-                # Get income account
-                income_account = line.product_id.property_account_income_id or \
-                               line.product_id.categ_id.property_account_income_categ_id
-                
-                if not income_account:
-                    _logger.warning(f"No income account found for line {line.name} in SO {self.name}")
-                    continue
-                
-                # Create accrual line
-                self.env['saatchi.accrued_revenue_lines'].create({
-                    'accrued_revenue_id': accrued_revenue.id,
-                    'ce_line_id': line.id,
-                    'account_id': income_account.id,
-                    'label': f'{self.name} - {line.name}',
-                    'credit': accrued_amount,
-                    'currency_id': line.currency_id.id,
-                    'analytic_distribution': analytic_distribution,
+                self.env['saatchi.accrued_revenue.wizard.line'].create({
+                    'wizard_id': wizard.id,
+                    'sale_order_id': record.id,
+                    'amount_total': record.x_ce_variance_revenue,
+                    'has_existing_accrual': bool(existing),
+                    'existing_accrual_ids': [(6, 0, existing.ids)],
+                    'create_accrual': True,
                 })
-                
-                total_eligible_for_accrue += accrued_amount
-                lines_created += 1
+
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Create Accrued Revenue'),
+            'res_model': 'saatchi.accrued_revenue.wizard',
+            'view_mode': 'form',
+            'res_id': wizard.id,
+            'views': [(False, 'form')],
+            'target': 'new',
+            'context': self.env.context,
+        }
+
+    # ========== Accrual Creation Methods ==========
+    
+    def _calculate_accrual_amount(self):
+        """
+        Calculate total accrual amount for this sale order
+        
+        Only processes Agency Charges category lines that have:
+        - Delivered but not invoiced quantity (accrued_qty > 0)
+        
+        Returns:
+            float: Total accrual amount
+        """
+        self.ensure_one()
+        amount_total = 0
+        
+        for line in self.order_line:
+            if line.display_type:
+                continue
             
-            # If no lines were created, delete the accrued revenue and return False
-            if lines_created == 0:
-                accrued_revenue.unlink()
-                _logger.warning(f"No eligible lines found for accrual in SO {self.name}")
+            if not self._is_agency_charges_category(line.product_template_id):
+                continue
+            
+            accrued_qty = line.product_uom_qty - line.qty_invoiced
+            if accrued_qty <= 0:
+                continue
+            
+            accrued_amount = accrued_qty * line.price_unit
+            amount_total += accrued_amount
+        
+        return amount_total
+
+    def action_create_custom_accrued_revenue(self, is_override=False, accrual_date=False, reversal_date=False, is_adjustment=False, is_system_generated=True):
+        """
+        Create accrued revenue entry for this sale order
+        
+        Process:
+        1. Validate SO state (skip if override=True)
+        2. Create accrued revenue record
+        3. Create lines based on type:
+           - Normal/Override: Individual SO lines + Total Accrued (with auto-reversal)
+           - Adjustment: Digital Income line + Total Accrued (NO auto-reversal)
+        
+        Args:
+            is_override: If True, skip validation (Scenario 1: Manual Accrue)
+            accrual_date: Custom accrual date
+            reversal_date: Custom reversal date
+            is_adjustment: If True, create adjustment entry (Scenario 3 - NO auto-reversal)
+        
+        Returns:
+            int: Accrual record ID if successful, False otherwise
+        """
+        self.ensure_one()
+        
+        # Validate sale order state (skip if override or adjustment)
+        if not is_override and not is_adjustment:
+            if self.state != 'sale' or self.x_ce_status not in ['signed', 'billable']:
+                _logger.warning(f"SO {self.name} does not meet accrual criteria")
                 return False
+        
+        if not accrual_date:
+            accrual_date = self.env['saatchi.accrued_revenue']._default_accrual_date()
+        if not reversal_date:
+            reversal_date = self.env['saatchi.accrued_revenue']._default_reversal_date()
+        
+        # Create accrued revenue record
+        accrued_revenue = self.env['saatchi.accrued_revenue'].create({
+            'related_ce_id': self.id,
+            'currency_id': self.currency_id.id,
+            'date': accrual_date,
+            'reversal_date': reversal_date,
+            'is_adjustment_entry': is_adjustment,
+            'x_accrual_system_generated': is_system_generated
+        })
+        
+        if is_adjustment:
+            # Scenario 3: Create adjustment entry (NO auto-reversal)
+            result = self._create_adjustment_entry_lines(accrued_revenue)
+        else:
+            # Normal or Override: Create lines from SO (with auto-reversal)
+            result = self._create_normal_accrual_lines(accrued_revenue)
+        
+        # Return the result (accrual ID or False)
+        return result
+    
+    def _create_normal_accrual_lines(self, accrued_revenue):
+        """
+        Create normal accrual lines from SO lines
+        
+        Structure:
+        - Credit lines: Revenue accounts (from SO lines)
+        - Debit line: Total Accrued (accrual account)
+        - Creates automatic reversal entry
+        
+        Args:
+            accrued_revenue: The accrued revenue record
             
-            # Create the total line (debit side)
+        Returns:
+            int: Accrual record ID if successful, False otherwise
+        """
+        total_eligible_for_accrue = 0
+        lines_created = 0
+        
+        _logger.info(f"Starting accrual creation for SO {self.name}")
+        
+        for line in self.order_line:
+            if line.display_type:
+                continue
+            
+            if not self._is_agency_charges_category(line.product_template_id):
+                _logger.debug(f"Skipping line {line.name} - not Agency Charges category")
+                continue
+            
+            accrued_qty = line.product_uom_qty - line.qty_invoiced
+            if accrued_qty <= 0:
+                _logger.debug(f"Skipping line {line.name} - no accrued qty (qty: {line.product_uom_qty}, invoiced: {line.qty_invoiced})")
+                continue
+            
+            accrued_amount = accrued_qty * line.price_unit
+            analytic_distribution = line.analytic_distribution or {}
+            
+            if not analytic_distribution and hasattr(self, 'analytic_distribution') and self.analytic_distribution:
+                analytic_distribution = self.analytic_distribution
+            
+            income_account = line.product_id.property_account_income_id or \
+                           line.product_id.categ_id.property_account_income_categ_id
+            
+            if not income_account:
+                _logger.warning(f"No income account found for line {line.name} in SO {self.name}")
+                continue
+            
             self.env['saatchi.accrued_revenue_lines'].create({
                 'accrued_revenue_id': accrued_revenue.id,
-                'label': 'Total Accrued',
-                'currency_id': self.currency_id.id,
+                'ce_line_id': line.id,
+                'account_id': income_account.id,
+                'label': f'{self.name} - {line.name}',
+                'credit': accrued_amount,
+                'debit': 0.0,
+                'currency_id': line.currency_id.id,
+                'analytic_distribution': analytic_distribution,
             })
             
-            # Update the original total amount
-            accrued_revenue.write({'ce_original_total_amount': total_eligible_for_accrue})
+            total_eligible_for_accrue += accrued_amount
+            lines_created += 1
+            _logger.debug(f"Created line for {line.name}, amount: {accrued_amount}")
+        
+        if lines_created == 0:
+            accrued_revenue.unlink()
+            _logger.warning(f"No eligible lines found for accrual in SO {self.name}")
+            return False
+        
+        # Create Total Accrued line (debit)
+        self.env['saatchi.accrued_revenue_lines'].create({
+            'accrued_revenue_id': accrued_revenue.id,
+            'label': 'Total Accrued',
+            'currency_id': self.currency_id.id,
+            'account_id': accrued_revenue.accrual_account_id.id,
+            'debit': 0.0,
+            'credit': 0.0,
+        })
+        
+        accrued_revenue.write({'ce_original_total_amount': total_eligible_for_accrue})
+        
+        _logger.info(f"✓ Created accrual ID {accrued_revenue.id} for SO {self.name} with {lines_created} lines, total: {total_eligible_for_accrue}")
+        
+        return accrued_revenue.id
+    
+    def _create_adjustment_entry_lines(self, accrued_revenue):
+        """
+        Create adjustment entry lines (Scenario 3)
+        
+        Structure (only 2 lines, NO auto-reversal):
+        1. Dr. Digital Income (5787) - default calculated amount (user editable)
+        2. Cr. Total Accrued (1210) - matches Digital Income amount
+        
+        This is a PERMANENT adjustment entry, NOT reversed automatically.
+        
+        Args:
+            accrued_revenue: The accrued revenue record
             
-            _logger.info(f"Created accrual for SO {self.name} with {lines_created} lines, total: {total_eligible_for_accrue}")
-            
-            # If override is True, return the accrued revenue ID
-            if is_override:
-                return accrued_revenue.id
-            
-            return True
+        Returns:
+            int: Accrual record ID if successful, False otherwise
+        """
+        # Calculate total accrual amount as default suggestion
+        total_accrual_amount = self._calculate_accrual_amount()
+        
+        if total_accrual_amount <= 0:
+            # Still create the entry but with 0 amount (user will fill in manually)
+            total_accrual_amount = 0
+            _logger.info(f"Creating adjustment entry for SO {self.name} with 0 default amount (user will edit)")
+        
+        # Get Digital Income account (ID: 5787)
+        digital_income_account = accrued_revenue.digital_income_account_id
+        if not digital_income_account:
+            accrued_revenue.unlink()
+            raise UserError(_("Digital Income account not configured. Please set it in the accrual settings."))
+        
+        # Get analytic distribution from SO
+        analytic_distribution = {}
+        if hasattr(self, 'analytic_distribution') and self.analytic_distribution:
+            analytic_distribution = self.analytic_distribution
+        
+        # Line 1: Dr. Digital Income (user can edit this amount)
+        self.env['saatchi.accrued_revenue_lines'].create({
+            'accrued_revenue_id': accrued_revenue.id,
+            'account_id': digital_income_account.id,
+            'label': 'Digital Income - Adjustment',
+            'debit': total_accrual_amount,
+            'credit': 0.0,
+            'currency_id': self.currency_id.id,
+            'analytic_distribution': analytic_distribution,
+        })
+        
+        # Line 2: Cr. Total Accrued (will be auto-calculated to match)
+        self.env['saatchi.accrued_revenue_lines'].create({
+            'accrued_revenue_id': accrued_revenue.id,
+            'label': 'Total Accrued',
+            'currency_id': self.currency_id.id,
+            'account_id': accrued_revenue.accrual_account_id.id,
+            'debit': 0.0,
+            'credit': 0.0,
+        })
+        
+        accrued_revenue.write({'ce_original_total_amount': total_accrual_amount})
+        
+        _logger.info(f"✓ Created adjustment entry for SO {self.name}, default amount: {total_accrual_amount} (NO auto-reversal)")
+        
+        return accrued_revenue.id
 
     def _is_agency_charges_category(self, product):
-        """Check if product belongs to Agency Charges category or its children"""
+        """
+        Check if product belongs to Agency Charges category or its children
+        
+        Args:
+            product: product.template recordset
+        
+        Returns:
+            bool: True if product is in Agency Charges category
+        """
         if not product or not product.categ_id:
             return False
         
-        # Check current category and all parents
         current_categ = product.categ_id
         while current_categ:
             if current_categ.name.lower() == 'agency charges':
@@ -196,114 +474,67 @@ class SaleOrder(models.Model):
         return False
 
 
-
 class AccountMoveLine(models.Model):
+    """
+    Account Move Line Extension
+    
+    Adds custom fields for tracking CE-related information on journal entry lines.
+    """
     _inherit = "account.move.line"
 
-    x_ce_code = fields.Char(string="CE Code")
-    x_ce_date = fields.Date(string="CE Date")
-    x_remarks = fields.Char(string="Remarks")
+    x_ce_code = fields.Char(
+        string="CE Code",
+        help="Contract Estimate code from sale order"
+    )
     
+    x_ce_date = fields.Date(
+        string="CE Date",
+        help="Contract Estimate date from sale order"
+    )
+    
+    x_remarks = fields.Char(
+        string="Remarks",
+        help="Additional remarks for this journal entry line"
+    )
+
 
 class AccountMove(models.Model):
+    """
+    Account Move Extension
+    
+    Adds fields to track accrued revenue-related journal entries.
+    """
     _inherit = "account.move"
     
     related_custom_accrued_record = fields.Many2one(
-        'saatchi.accrued_revenue', 
-        store=True, 
-        readonly=True
+        'saatchi.accrued_revenue',
+        store=True,
+        readonly=True,
+        string="Related Accrued Revenue",
+        help="Link to the accrued revenue record that generated this move"
     )
-    x_remarks = fields.Char(string="Remarks")
-
-    x_accrual_system_generated = fields.Boolean(string="Accrual Revenue / Reversal Generated by system?")
-
-
-    # sub_currency_id = fields.Many2one(
-    #     'res.currency',
-    #     string="Foreign Currency",
-    #     default=lambda self: self.env.ref('base.USD')
-    # )
     
-    # custom_exchange_rate = fields.Float(
-    #     string="Foreign Currency Exchange Rate",
-    #     digits=(12, 2),
-    #     help="1 unit of document currency = X sub currency units",
-    #     compute="_compute_custom_exchange_rate",
-    #     # store=True
-    # )
-    
-    # # @api.depends('currency_id', 'sub_currency_id', 'date')
-    # def _compute_custom_exchange_rate(self):
-    #     for record in self:
-    #         # If no sub_currency_id is set, default to 1.0
-    #         if not record.sub_currency_id:
-    #             record.custom_exchange_rate = 1.0
-    #             continue
-                
-    #         # If document currency is the same as sub currency, rate is 1.0
-    #         if record.currency_id == record.sub_currency_id:
-    #             record.custom_exchange_rate = 1.0
-    #             continue
-                
-    #         # Compute exchange rate from document currency to sub_currency_id
-    #         try:
-    #             date = record.date or fields.Date.today()
-    #             company = record.company_id or self.env.company
-                
-    #             # Convert 1 unit of document currency to sub_currency_id
-    #             rate = record.currency_id._convert(
-    #                 record.amount_total,
-    #                 record.sub_currency_id,
-    #                 company,
-    #                 date
-    #             )
-    #             record.custom_exchange_rate = rate
-                
-    #         except Exception as e:
-    #             # Fallback: try manual rate lookup using the rates from currency table
-    #             try:
-    #                 # In Odoo, base currency (usually USD) has rate = 1.0
-    #                 # In Odoo, base currency (usually USD) has rate = 1.0
-    #                 # Other currencies have rates relative to base currency
-                    
-    #                 # Get the rate for document currency (JPY in your case)
-    #                 doc_currency_rate = self.env['res.currency.rate'].search([
-    #                     ('currency_id', '=', record.currency_id.id),
-    #                     ('name', '<=', search_date),
-    #                     ('company_id', 'in', [company.id, False])
-    #                 ], order='name desc', limit=1)
-                    
-    #                 # Get the rate for sub currency (PHP in your case)  
-    #                 sub_currency_rate = self.env['res.currency.rate'].search([
-    #                     ('currency_id', '=', record.sub_currency_id.id),
-    #                     ('name', '<=', search_date),
-    #                     ('company_id', 'in', [company.id, False])
-    #                 ], order='name desc', limit=1)
-                    
-    #                 if doc_currency_rate and sub_currency_rate:
-    #                     # If both currencies have rates, calculate cross rate
-    #                     # rate = (1 / doc_rate) * sub_rate
-    #                     record.custom_exchange_rate = sub_currency_rate.rate / doc_currency_rate.rate
-    #                 elif not doc_currency_rate and sub_currency_rate:
-    #                     # Document currency is base currency (rate = 1.0)
-    #                     record.custom_exchange_rate = sub_currency_rate.rate
-    #                 elif doc_currency_rate and not sub_currency_rate:
-    #                     # Sub currency is base currency (rate = 1.0)
-    #                     record.custom_exchange_rate = 1.0 / doc_currency_rate.rate
-    #                 else:
-    #                     record.custom_exchange_rate = 1.0
-                        
-    #             except Exception:
-    #                 record.custom_exchange_rate = 1.0
+    x_remarks = fields.Char(
+        string="Remarks",
+        help="Additional remarks for this journal entry"
+    )
 
-
+    x_accrual_system_generated = fields.Boolean(
+        string="System Generated",
+        help="Indicates if this accrual was generated automatically by the system"
+    )
 
 
 class GeneralLedgerCustomHandler(models.AbstractModel):
+    """
+    General Ledger Report Handler Extension
+    
+    Overrides the query to include currency_name in the General Ledger report.
+    """
     _inherit = 'account.general.ledger.report.handler'
 
     def _get_query_amls(self, report, options, expanded_account_ids, offset=0, limit=None):
-        """ Override to add currency_name field """
+        """Override to add currency_name field to General Ledger query"""
         additional_domain = [('account_id', 'in', expanded_account_ids)] if expanded_account_ids is not None else None
         queries = []
         journal_name = self.env['account.journal']._field_to_sql('journal', 'name')

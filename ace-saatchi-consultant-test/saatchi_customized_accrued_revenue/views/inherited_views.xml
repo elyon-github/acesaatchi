@@ -10,18 +10,43 @@
                 </xpath>
             </field>
         </record>
-        <!-- <record id="view_move_form_inherit_custom" model="ir.ui.view">
-            <field name="name">account.move.form.inherit.custom</field>
-            <field name="model">account.move</field>
-            <field name="inherit_id" ref="account.view_move_form"/>
+        <record id="view_sale_order_list_inherit_custom" model="ir.ui.view">
+            <field name="name">sale.order.list.inherit.custom</field>
+            <field name="model">sale.order</field>
+            <field name="inherit_id" ref="sale.sale_order_tree"/>
             <field name="arch" type="xml">
-                <xpath expr="//field[@name='amount_residual']" position="after">
-                    <field name="x_alt_currency_id" options="{'no_open':true}"/>
-                    <field name="alt_currency_amount" widget="monetary" options="{'currency_field': 'x_alt_currency_id'}"/>
+                <xpath expr="//field[@name='amount_total']" position="after">
+                
+                    <field name="x_ce_approved_estimate_billing"
+                           widget="monetary"
+                           sum="AEB"/>
+                
+                    <field name="x_ce_approved_estimate_revenue"
+                           widget="monetary"
+                           sum="AER"/>
+                
+                    <field name="x_ce_invoiced_billing"
+                           widget="monetary"
+                           sum="IB"/>
+                
+                    <field name="x_ce_invoiced_revenue"
+                           widget="monetary"
+                           sum="IR"/>
+                
+                    <field name="x_ce_variance_billing"
+                           widget="monetary"
+                           sum="VB"/>
+                
+                    <field name="x_ce_variance_revenue"
+                           widget="monetary"
+                           sum="VR"/>
+                
                 </xpath>
-            </field>
-        </record> -->
 
+
+    
+            </field>
+        </record>
 
     </data>
 </odoo>
