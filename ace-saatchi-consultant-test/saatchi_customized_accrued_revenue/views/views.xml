@@ -33,24 +33,34 @@
         <field name="name">saatchi.accrued_revenue.list</field>
         <field name="model">saatchi.accrued_revenue</field>
         <field name="arch" type="xml">
-
             <list string="Accrued Revenues" js_class="button_in_list">
                 <header>
                     <button string="Create Entries" name="create_multiple_entries" type="object"/>
                 </header>
+    
+                <field name="currency_id" column_invisible="1"/>
+    
+                <field name="display_name" string="Name"/>
                 <field name="x_related_ce_id"/>
+                <field name="ce_partner_id"/>
                 <field name="ce_code"/>
-                <field name="ce_partner_id"  widget="res_partner_many2one"/>
-                <field name="ce_status"/>
+                <field name="date"/>
+                <field name="reversal_date"/>
                 <field name="ce_job_description"/>
-                <field name="state" widget="badge" 
-                    decoration-info="state == 'draft'"
-                    decoration-success="state == 'accrued'"
-                    decoration-warning="state == 'reversed'"
-                    decoration-danger="state == 'cancel'"/>
+                <field name="total_amount_accrued" widget="monetary"
+                       options="{'currency_field': 'currency_id'}"/>
+                <field name="ce_status"/>
+                <field name="x_accrual_system_generated"/>
+                <field name="is_adjustment_entry"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'draft'"
+                       decoration-warning="state == 'accrued'"
+                       decoration-success="state == 'reversed'"
+                       decoration-danger="state == 'cancel'"/>
             </list>
         </field>
     </record>
+
 
     <!-- Form view -->
     <record id="view_saatchi_customized_accrued_revenue_form" model="ir.ui.view">
@@ -90,8 +100,7 @@
                             <field name="ce_status"/>
                             <field name="ce_job_description"/>
                             <field name="currency_id" invisible="1"/>
-                            <field name="related_accrued_entry" invisible="not related_accrued_entry"/>
-                            <field name="related_reverse_accrued_entry" invisible="not related_reverse_accrued_entry"/>
+
                             <field name="ce_original_total_amount" widget="monetary" options="{'currency_field': 'currency_id'}" readonly="1"/>
                              <field name="x_accrual_system_generated" readonly="state not in ['draft']"/>
                              <!-- <field name="remarks"/> -->
@@ -101,13 +110,15 @@
                             <field name="accrual_account_id" readonly="state not in ['draft']"/>
                             <field name="date" readonly="state not in ['draft']"/>
                             <field name="reversal_date" readonly="state not in ['draft']"/>
+                            <field name="related_accrued_entry" invisible="not related_accrued_entry"/>
+                            <field name="related_reverse_accrued_entry" invisible="not related_reverse_accrued_entry"/>
                         </group>
                     </group>
                     <group>
 
                         <notebook>
                             <page string="Accrued Lines">
-                                <field name="line_ids">
+                                <field name="line_ids" readonly="state not in ['draft']">
                                     <list editable="bottom" create="0">
                                         <field name="state" column_invisible="1"/>
                                         <field name="sequence" widget="handle"/>
@@ -116,7 +127,7 @@
                                         <field name="analytic_distribution" widget="analytic_distribution" readonly="1"/>
                                         <field name="label"/>
                                         <field name="debit" sum="Total Debit"/>
-                                        <field name="credit" sum="Total Credit" readonly="state not in ['draft']"/>
+                                        <field name="credit" sum="Total Credit"/>
                                     </list>
                                 </field>
                             </page>

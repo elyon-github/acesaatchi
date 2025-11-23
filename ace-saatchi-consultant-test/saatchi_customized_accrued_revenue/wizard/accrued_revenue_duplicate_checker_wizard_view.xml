@@ -40,7 +40,8 @@
                             <field name="accrual_date" 
                                    help="Last day of the accrual period (e.g., Oct 31, 2025)"/>
                             <field name="reversal_date" 
-                                   help="First day of the next period - only used for normal accruals (Scenario 3 has NO auto-reversal)"/>
+                                   help="First day of the next period - only used for normal accruals (Scenario 3 has NO auto-reversal)"
+                                   invisible="accrual_scenario == 'scenario_3' or not special_case_mode"/>
                         </group>
                         <group>
                             <!-- Special Case Mode (hidden, controlled by context) -->

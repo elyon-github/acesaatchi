@@ -165,7 +165,7 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
         if self.accrual_scenario == 'scenario_1':
             # Filter lines where ANY existing accrual is draft or accrued
             with_existing = selected_lines.filtered(
-                lambda l: any(a.state in ['accrued', 'draft'] for a in l.existing_accrual_ids)
+                lambda l: any(a.state in ['accrued', 'draft', 'reversed'] for a in l.existing_accrual_ids)
             )
         
             if with_existing:
@@ -183,7 +183,7 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
             # Scenario 2: Only SOs with existing accruals in 'accrued' state
             sos_without_accrued = []
             for line in selected_lines:
-                accrued_records = line.existing_accrual_ids.filtered(lambda a: a.state == 'accrued')
+                accrued_records = line.existing_accrual_ids.filtered(lambda a: a.state == 'reversed' or a.state == 'accrued')
                 if not accrued_records:
                     sos_without_accrued.append(line.sale_order_id.name)
             
@@ -209,7 +209,7 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                     continue
         
                 # 2. Has accruals but none are in "accrued" state
-                accrued_records = line.existing_accrual_ids.filtered(lambda a: a.state == 'accrued')
+                accrued_records = line.existing_accrual_ids.filtered(lambda a: a.state == 'reversed' or a.state == 'accrued')
                 if not accrued_records:
                     sos_without_accrued.append(line.sale_order_id.name)
         
@@ -428,6 +428,7 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                     accrual_date=self.accrual_date,
                     reversal_date=self.reversal_date,
                     is_adjustment=False,
+                    is_system_generated=False
                 )
                 
                 if result:
@@ -506,8 +507,9 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                 result = line.sale_order_id.action_create_custom_accrued_revenue(
                     is_override=False,
                     accrual_date=self.accrual_date,
-                    reversal_date=self.reversal_date,
-                    is_adjustment=True  # Create adjustment entry (NO reversal)
+                    reversal_date=False,
+                    is_adjustment=True,  # Create adjustment entry (NO reversal),
+                    is_system_generated=False
                 )
                 
                 if result:
@@ -648,7 +650,7 @@ class SaatchiAccruedRevenueWizardLine(models.TransientModel):
                     ('x_related_ce_id', '=', line.sale_order_id.id),
                     ('date', '>=', line.wizard_id.accrual_date),
                     ('date', '<=', line.wizard_id.reversal_date),
-                    ('state', 'in', ['draft', 'accrued'])
+                    ('state', 'in', ['draft', 'accrued', 'reversed'])
                 ])
                 line.existing_accrual_ids = [(6, 0, existing.ids)]
             else:

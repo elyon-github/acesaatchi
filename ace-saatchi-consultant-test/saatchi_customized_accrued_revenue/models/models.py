@@ -139,7 +139,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
     reversal_date = fields.Date(
         string="Reversal Date",
         default=lambda self: self._default_reversal_date(),
-        required=True,
+        # required=True,
         tracking=True
     )
 
@@ -206,8 +206,15 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         default=lambda self: self.env.company
     )
 
+    total_amount_accrued = fields.Monetary(
+        string="Total Accrued Amount",
+        compute="_compute_total_amount_accrued",
+        currency_field="currency_id",
+        store=True,
+        help="Sum of all credit lines (excluding Total Accrued line)"
+    )
     # ========== Compute Methods ==========
-    
+                
     @api.depends('x_related_ce_id', 'x_related_ce_id.x_ce_code')
     def _compute_ce_code(self):
         """Compute CE code from related sale order"""
@@ -225,6 +232,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         - reversed: Both entries posted (only for normal accruals with reversal)
         - cancel: Any entry cancelled (links still exist)
         """
+        # raise UserError('huh')
         for record in self:
             # Adjustment entries don't have reversal entries
             if record.is_adjustment_entry:
@@ -250,18 +258,28 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
                         record.state = 'reversed'
                     elif accrual_state == 'posted' and reversal_state == 'draft':
                         record.state = 'accrued'
+                    elif accrual_state == 'posted' and not reversal_state:
+                        record.state = 'accrued'
                     else:
                         record.state = 'draft'
+
                 else:
                     record.state = 'draft'
-        
+            
     def _compute_display_name(self):
         """Generate display name from sale order and record ID"""
         for record in self:
             so_name = record.x_related_ce_id.name if record.x_related_ce_id else 'New'
-            prefix = '[ADJ] ' if record.is_adjustment_entry else ''
-            record.display_name = f'{prefix}{so_name} - {record.id}'
-        
+            suffix = ' | [ADJ] ' if record.is_adjustment_entry else ''
+            record.display_name = f'{so_name} | {record.ce_code}{suffix}'
+
+    @api.depends('line_ids.debit')
+    def _compute_total_amount_accrued(self):
+        """Calculate total debit amount from all credit lines (excluding Total Accrued)"""
+        for record in self:
+            debit_lines = record.line_ids.filtered(lambda l: l.label == 'Total Accrued')
+            record.total_amount_accrued = sum(debit_lines.mapped('debit'))
+            
     @api.depends('line_ids.credit')
     def _compute_total_debit_in_accrue_account(self):
         """Calculate total debit amount from all credit lines (excluding Total Accrued)"""
@@ -526,7 +544,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
             reverse_move._post()
             self.related_reverse_accrued_entry = reverse_move.id
         
-        self.state = 'accrued'
+        # self.state = 'accrued'
         
         # Post message to sale order
         if self.x_related_ce_id:

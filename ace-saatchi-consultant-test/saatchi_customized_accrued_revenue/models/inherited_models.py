@@ -165,7 +165,7 @@ class SaleOrder(models.Model):
                 ('x_related_ce_id', '=', so.id),
                 ('date', '>=', accrual_date),
                 ('date', '<=', reversal_date),
-                ('state', 'in', ['draft', 'accrued'])
+                ('state', 'in', ['draft', 'accrued','reversed'])
             ], limit=1)
             
             if existing:
@@ -201,7 +201,7 @@ class SaleOrder(models.Model):
                     ('x_related_ce_id', '=', record.id),
                     ('date', '>=', accrual_date),
                     ('date', '<=', reversal_date),
-                    ('state', 'in', ['draft', 'accrued'])
+                    ('state', 'in', ['draft', 'accrued', 'reversed'])
                 ])
                 
                 self.env['saatchi.accrued_revenue.wizard.line'].create({
@@ -285,8 +285,8 @@ class SaleOrder(models.Model):
         
         if not accrual_date:
             accrual_date = self.env['saatchi.accrued_revenue']._default_accrual_date()
-        if not reversal_date:
-            reversal_date = self.env['saatchi.accrued_revenue']._default_reversal_date()
+        # if not reversal_date:
+        #     reversal_date = self.env['saatchi.accrued_revenue']._default_reversal_date()
         
         # Create accrued revenue record
         accrued_revenue = self.env['saatchi.accrued_revenue'].create({
