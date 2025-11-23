@@ -299,7 +299,7 @@ class ResConfigSettings(models.TransientModel):
             'account.payment',
             'account.batch.payment',
             'account.analytic.line',
-            'account.analytic.account',
+            # 'account.analytic.account',
             'account.partial.reconcile',
             'account.move.line',
             'hr.expense.sheet',

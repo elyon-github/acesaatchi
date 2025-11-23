@@ -44,7 +44,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
     )
     
     # ========== Related Sale Order ==========
-    related_ce_id = fields.Many2one(
+    x_related_ce_id = fields.Many2one(
         'sale.order',
         string="Sale Order",
         readonly=True,
@@ -208,11 +208,11 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
 
     # ========== Compute Methods ==========
     
-    @api.depends('related_ce_id', 'related_ce_id.x_ce_code')
+    @api.depends('x_related_ce_id', 'x_related_ce_id.x_ce_code')
     def _compute_ce_code(self):
         """Compute CE code from related sale order"""
         for record in self:
-            record.ce_code = record.related_ce_id.x_ce_code if record.related_ce_id else False
+            record.ce_code = record.x_related_ce_id.x_ce_code if record.x_related_ce_id else False
 
     @api.depends('related_accrued_entry.state', 'related_reverse_accrued_entry.state')
     def _compute_state(self):
@@ -246,10 +246,10 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
                     
                     if accrual_state == 'cancel' or reversal_state == 'cancel':
                         record.state = 'cancel'
-                    elif accrual_state == 'posted' and reversal_state == 'draft':
-                        record.state = 'accrued'
                     elif accrual_state == 'posted' and reversal_state == 'posted':
                         record.state = 'reversed'
+                    elif accrual_state == 'posted' and reversal_state == 'draft':
+                        record.state = 'accrued'
                     else:
                         record.state = 'draft'
                 else:
@@ -258,7 +258,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
     def _compute_display_name(self):
         """Generate display name from sale order and record ID"""
         for record in self:
-            so_name = record.related_ce_id.name if record.related_ce_id else 'New'
+            so_name = record.x_related_ce_id.name if record.x_related_ce_id else 'New'
             prefix = '[ADJ] ' if record.is_adjustment_entry else ''
             record.display_name = f'{prefix}{so_name} - {record.id}'
         
@@ -269,14 +269,14 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
             credit_lines = record.line_ids.filtered(lambda l: l.label != 'Total Accrued')
             record.total_debit_in_accrue_account = sum(credit_lines.mapped('credit'))
     
-    @api.depends("related_ce_id")
+    @api.depends("x_related_ce_id")
     def _compute_ce_fields(self):
         """Compute fields from related sale order"""
         for rec in self:
-            if rec.related_ce_id:
-                rec.ce_partner_id = rec.related_ce_id.partner_id.id or False
-                rec.ce_status = rec.related_ce_id.x_ce_status or False
-                rec.ce_job_description = rec.related_ce_id.x_job_description or False
+            if rec.x_related_ce_id:
+                rec.ce_partner_id = rec.x_related_ce_id.partner_id.id or False
+                rec.ce_status = rec.x_related_ce_id.x_ce_status or False
+                rec.ce_job_description = rec.x_related_ce_id.x_job_description or False
             else:
                 rec.ce_partner_id = False
                 rec.ce_status = False
@@ -337,9 +337,9 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
                     if accrued_total_line:
                         analytic_distribution = self._calculate_weighted_analytic_distribution(debit_lines)
                         
-                        if not analytic_distribution and record.related_ce_id:
-                            if hasattr(record.related_ce_id, 'analytic_distribution') and record.related_ce_id.analytic_distribution:
-                                analytic_distribution = record.related_ce_id.analytic_distribution
+                        if not analytic_distribution and record.x_related_ce_id:
+                            if hasattr(record.x_related_ce_id, 'analytic_distribution') and record.x_related_ce_id.analytic_distribution:
+                                analytic_distribution = record.x_related_ce_id.analytic_distribution
                         
                         # Use with_context to prevent recursion
                         accrued_total_line.with_context(skip_total_update=True).write({
@@ -365,9 +365,9 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
                         
                         analytic_distribution = self._calculate_weighted_analytic_distribution(credit_lines)
                         
-                        if not analytic_distribution and record.related_ce_id:
-                            if hasattr(record.related_ce_id, 'analytic_distribution') and record.related_ce_id.analytic_distribution:
-                                analytic_distribution = record.related_ce_id.analytic_distribution
+                        if not analytic_distribution and record.x_related_ce_id:
+                            if hasattr(record.x_related_ce_id, 'analytic_distribution') and record.x_related_ce_id.analytic_distribution:
+                                analytic_distribution = record.x_related_ce_id.analytic_distribution
                         
                         # Use with_context to prevent recursion
                         accrued_total_line.with_context(skip_total_update=True).write({
@@ -521,7 +521,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
                 'ref': _('Reversal of: %s', move.ref),
                 'name': '/',
                 'date': self.reversal_date,
-                'related_custom_accrued_record': self.id
+                'x_related_custom_accrued_record': self.id
             }])
             reverse_move._post()
             self.related_reverse_accrued_entry = reverse_move.id
@@ -529,7 +529,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         self.state = 'accrued'
         
         # Post message to sale order
-        if self.related_ce_id:
+        if self.x_related_ce_id:
             if self.is_adjustment_entry:
                 body = _(
                     'Adjustment entry created on %(date)s: %(accrual_entry)s',
@@ -544,7 +544,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
                     accrual_entry=move._get_html_link(),
                     reverse_entry=self.related_reverse_accrued_entry._get_html_link(),
                 )
-            self.related_ce_id.message_post(body=body)
+            self.x_related_ce_id.message_post(body=body)
         
         move_ids = [move.id]
         if self.related_reverse_accrued_entry:
@@ -586,7 +586,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
                 'account_id': line.account_id.id,
                 'partner_id': self.ce_partner_id.id if self.ce_partner_id else False,
                 'x_ce_code': self.ce_code,
-                'x_ce_date': self.related_ce_id.date_order if self.related_ce_id else False,
+                'x_ce_date': self.x_related_ce_id.date_order if self.x_related_ce_id else False,
                 'x_remarks': self.remarks,
             }
             
@@ -628,14 +628,14 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         ref_prefix = '[ADJUSTMENT] ' if self.is_adjustment_entry else 'Accrual - '
         
         move_vals = {
-            'ref': f'{ref_prefix}{self.related_ce_id.name if self.related_ce_id else self.display_name}',
+            'ref': f'{ref_prefix}{self.x_related_ce_id.name if self.x_related_ce_id else self.display_name}',
             'journal_id': self.journal_id.id,
             'partner_id': self.ce_partner_id.id if self.ce_partner_id else False,
             'date': self.date,
             'company_id': self.company_id.id,
             'currency_id': move_currency_id,
             'line_ids': [(0, 0, line_vals) for line_vals in move_line_vals],
-            'related_custom_accrued_record': self.id,
+            'x_related_custom_accrued_record': self.id,
             'x_remarks': self.remarks,
             'x_accrual_system_generated': self.x_accrual_system_generated
         }
@@ -650,7 +650,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
             'name': _('Journal Entries'),
             'res_model': 'account.move',
             'view_mode': 'list,form',
-            'domain': [('related_custom_accrued_record', '=', self.id)],
+            'domain': [('x_related_custom_accrued_record', '=', self.id)],
         }
 
     def action_reset_and_cancel(self):
@@ -723,17 +723,17 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         """
         self.ensure_one()
         
-        if not self.related_ce_id:
+        if not self.x_related_ce_id:
             raise UserError(_('No related sale order found. Cannot replace accrual.'))
         
-        so_id = self.related_ce_id.id
+        so_id = self.x_related_ce_id.id
         accrual_date = self.date
         reversal_date = self.reversal_date
         old_display_name = self.display_name
         
         self.action_reset_and_cancel()
         
-        new_accrual_id = self.related_ce_id.action_create_custom_accrued_revenue(
+        new_accrual_id = self.x_related_ce_id.action_create_custom_accrued_revenue(
             is_override=True,
             accrual_date=accrual_date,
             reversal_date=reversal_date

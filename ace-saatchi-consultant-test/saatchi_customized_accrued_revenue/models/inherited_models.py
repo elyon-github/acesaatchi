@@ -162,7 +162,7 @@ class SaleOrder(models.Model):
             potential |= so
             
             existing = self.env['saatchi.accrued_revenue'].search([
-                ('related_ce_id', '=', so.id),
+                ('x_related_ce_id', '=', so.id),
                 ('date', '>=', accrual_date),
                 ('date', '<=', reversal_date),
                 ('state', 'in', ['draft', 'accrued'])
@@ -198,7 +198,7 @@ class SaleOrder(models.Model):
         for record in records:
             if (record.x_ce_variance_revenue > 0 or special_case) and record.state == 'sale':
                 existing = self.env['saatchi.accrued_revenue'].search([
-                    ('related_ce_id', '=', record.id),
+                    ('x_related_ce_id', '=', record.id),
                     ('date', '>=', accrual_date),
                     ('date', '<=', reversal_date),
                     ('state', 'in', ['draft', 'accrued'])
@@ -290,7 +290,7 @@ class SaleOrder(models.Model):
         
         # Create accrued revenue record
         accrued_revenue = self.env['saatchi.accrued_revenue'].create({
-            'related_ce_id': self.id,
+            'x_related_ce_id': self.id,
             'currency_id': self.currency_id.id,
             'date': accrual_date,
             'reversal_date': reversal_date,
@@ -486,6 +486,8 @@ class AccountMoveLine(models.Model):
         string="CE Code",
         help="Contract Estimate code from sale order"
     )
+
+    x_sale_order = fields.Many2one(related='move_id.x_related_custom_accrued_record.x_related_ce_id')
     
     x_ce_date = fields.Date(
         string="CE Date",
@@ -506,7 +508,7 @@ class AccountMove(models.Model):
     """
     _inherit = "account.move"
     
-    related_custom_accrued_record = fields.Many2one(
+    x_related_custom_accrued_record = fields.Many2one(
         'saatchi.accrued_revenue',
         store=True,
         readonly=True,

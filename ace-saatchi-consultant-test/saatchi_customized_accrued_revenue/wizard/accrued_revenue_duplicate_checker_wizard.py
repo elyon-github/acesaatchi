@@ -645,7 +645,7 @@ class SaatchiAccruedRevenueWizardLine(models.TransientModel):
         for line in self:
             if line.sale_order_id and line.wizard_id.accrual_date and line.wizard_id.reversal_date:
                 existing = self.env['saatchi.accrued_revenue'].search([
-                    ('related_ce_id', '=', line.sale_order_id.id),
+                    ('x_related_ce_id', '=', line.sale_order_id.id),
                     ('date', '>=', line.wizard_id.accrual_date),
                     ('date', '<=', line.wizard_id.reversal_date),
                     ('state', 'in', ['draft', 'accrued'])
