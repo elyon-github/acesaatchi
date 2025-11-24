@@ -22,15 +22,14 @@
                     <!-- Title -->
                     <div class="oe_title">
                         <h1>
-                            <span invisible="special_case_mode">System Generated Accruals</span>
-                            <span invisible="not special_case_mode">Special Case: Manual Accrual Creation</span>
+                            <span invisible="special_case_mode">Generate Accrued Revenue</span>
+                            <span invisible="not special_case_mode">Manual Accrual Creation</span>
                         </h1>
                         <p class="text-muted" invisible="special_case_mode">
-                            Select sale orders to create accrued revenue entries. 
-                            Existing accruals for this period are highlighted in yellow.
+                            Create accrual entries for selected sale orders. Duplicates are highlighted in yellow.
                         </p>
                         <p class="text-muted" invisible="not special_case_mode">
-                            Choose a scenario below to handle accruals with special requirements.
+                            Select a scenario to handle special accrual requirements.
                         </p>
                     </div>
                     
@@ -40,8 +39,8 @@
                             <field name="accrual_date" 
                                    help="Last day of the accrual period (e.g., Oct 31, 2025)"/>
                             <field name="reversal_date" 
-                                   help="First day of the next period - only used for normal accruals (Scenario 3 has NO auto-reversal)"
-                                   invisible="accrual_scenario == 'scenario_3' or not special_case_mode"/>
+                                   help="First day of the next period for auto-reversal"
+                                   invisible="accrual_scenario == 'scenario_3'"/>
                         </group>
                         <group>
                             <!-- Special Case Mode (hidden, controlled by context) -->
@@ -59,28 +58,38 @@
                     <div class="alert alert-info" 
                          role="alert" 
                          invisible="not special_case_mode">
-                        <i class="fa fa-info-circle"/> 
-                        <strong> Scenario Explanation:</strong>
+                        <strong>Scenario Guide:</strong>
                         <ul class="mb-0 mt-2">
                             <li>
-                                <strong>Scenario 1 (Manual Accrue):</strong> 
-                                Creates accruals bypassing CE status validation. 
-                                Use when you need to accrue for SOs not in 'signed' or 'billable' status.
+                                <strong>Scenario 1:</strong> Create accruals bypassing status checks (use for non-standard SOs)
                             </li>
                             <li>
-                                <strong>Scenario 2 (Cancel &amp; Replace - Accrued State Only):</strong> 
-                                Cancels <u>only posted/accrued</u> entries (and their journal entries) for selected SOs, 
-                                then creates fresh replacements. <strong>Draft and Cancelled accruals are ignored.</strong>
-                                Use when correcting errors in posted accruals.
+                                <strong>Scenario 2:</strong> Cancel posted accruals and create new ones (corrects posted entries only)
                             </li>
                             <li>
-                                <strong>Scenario 3 (Adjustment Entry):</strong> 
-                                Creates adjustment entries (Dr. Digital Income | Cr. Accrued Revenue) to reduce previous accruals. 
-                                <strong>⚠️ IMPORTANT: NO automatic reversal is created - this is a PERMANENT adjustment.</strong>
-                                Default amounts are suggestions that can be edited in draft before posting.
-                                <strong>Only available for SOs with existing accruals.</strong>
+                                <strong>Scenario 3:</strong> Create permanent adjustment entries with no reversal (requires existing accruals)
                             </li>
                         </ul>
+                    </div>
+                    <!-- Info Banner - Special Case Mode -->
+                    <div class="alert alert-info mt-3" 
+                         role="alert"
+                         invisible="not special_case_mode">
+                        <strong invisible="accrual_scenario != 'scenario_1'">Scenario 1:</strong>
+                        <span invisible="accrual_scenario != 'scenario_1'">Accruals will be created regardless of SO status</span>
+                        
+                        <strong invisible="accrual_scenario != 'scenario_2'">Scenario 2:</strong>
+                        <span invisible="accrual_scenario != 'scenario_2'">Posted accruals will be cancelled and replaced with new entries</span>
+                        
+                        <strong invisible="accrual_scenario != 'scenario_3'">Scenario 3:</strong>
+                        <span invisible="accrual_scenario != 'scenario_3'">Permanent adjustment entries will be created (no reversal). Edit amounts in draft before posting.</span>
+                    </div>
+                    <!-- Warning Banner for Scenario 2 -->
+                    <div class="alert alert-danger" 
+                         role="alert"
+                         invisible="accrual_scenario != 'scenario_2' or not special_case_mode">
+                        <i class="fa fa-exclamation-triangle"/> 
+                        <strong>Warning:</strong> Scenario 2 will cancel existing posted accruals and their journal entries before creating replacements. This action cannot be undone.
                     </div>
                     
                     <!-- Warning Banner for Scenario 3 -->
@@ -88,33 +97,20 @@
                          role="alert"
                          invisible="accrual_scenario != 'scenario_3' or not special_case_mode">
                         <i class="fa fa-exclamation-triangle"/> 
-                        <strong>⚠️ Scenario 3 WARNING:</strong><br/>
-                        Adjustment entries are <strong>PERMANENT</strong> and will <strong>NOT</strong> be automatically reversed.<br/>
-                        Unlike normal accruals, these entries stay on the books indefinitely.<br/>
-                        Make sure to review and edit the amounts in draft before posting!
+                        <strong>Warning:</strong> Scenario 3 creates permanent entries with no automatic reversal. Review amounts before posting.
                     </div>
                     
                     <!-- Summary Banner -->
                     <div class="alert alert-warning mt-3" role="alert" invisible="not has_existing_accruals">
                         <i class="fa fa-exclamation-triangle"/> 
-                        <strong>Warning:</strong> The sale orders listed above already have accruals for this period.
-                        <span invisible="special_case_mode">Creating new accruals will result in duplicates.</span>
-                        <span invisible="not special_case_mode">
-                            Your selected scenario will determine how these are handled.
-                        </span>
-                        <span invisible="accrual_scenario != 'scenario_2'">
-                            <br/><strong>Note:</strong> Scenario 2 will only replace accruals in "Accrued" state (posted entries). 
-                            Draft and cancelled accruals will be ignored.
-                        </span>
-                        <span invisible="accrual_scenario != 'scenario_3'">
-                            <br/><strong>Note:</strong> Scenario 3 creates adjustment entries with NO auto-reversal. 
-                            These are permanent adjustments to reduce accrued amounts.
-                        </span>
+                        <strong>Duplicate Alert:</strong> Selected sale orders have existing accruals for this period.
+                        <span invisible="special_case_mode">Creating new entries will create duplicates.</span>
+                        <span invisible="not special_case_mode">Your scenario will handle these automatically.</span>
                     </div>
                     
                     <notebook>
                         <!-- ========== Page 1: Sale Orders Selection ========== -->
-                        <page string="Sale Orders to Process" name="sale_orders">
+                        <page string="Sale Orders" name="sale_orders">
                             <field name="so_line_ids" nolabel="1">
                                 <list string="Sale Orders" 
                                       editable="bottom" 
@@ -143,7 +139,7 @@
                                     <field name="ce_status" 
                                            readonly="1"
                                            optional="show"
-                                           string="CE Status"
+                                           string="Status"
                                            widget="badge"
                                            decoration-success="ce_status in ['signed', 'billable']"
                                            decoration-info="ce_status == 'for_client_signature'"
@@ -152,13 +148,13 @@
                                     <!-- Financial Information -->
                                     <field name="amount_total" 
                                            readonly="1" 
-                                           sum="Total For Accrue"
-                                           string="SO Accrual Amount"/>
+                                           sum="Total"
+                                           string="Accrual Amount"/>
                                     
                                     <field name="existing_accrual_total"
                                            readonly="1"
                                            optional="show"
-                                           string="Existing Total"/>
+                                           string="Existing"/>
                                     
                                     <field name="currency_id" 
                                            readonly="1" 
@@ -176,36 +172,10 @@
                             <div class="alert alert-info mt-3" 
                                  role="alert"
                                  invisible="special_case_mode">
-                                <i class="fa fa-info-circle"/> 
-                                <strong>Instructions:</strong>
-                                <ul class="mb-0">
-                                    <li>Toggle the <strong>Create</strong> checkbox to select sale orders</li>
-                                    <li>Lines highlighted in <strong style="background-color: #fff3cd;">yellow</strong> already have accruals for this period</li>
-                                    <li>Review existing accruals in the <strong>"Existing Accruals"</strong> tab before creating duplicates</li>
-                                </ul>
+                                <strong>Instructions:</strong> Toggle "Create" to select sale orders. Yellow rows have existing accruals.
                             </div>
                             
-                            <!-- Info Banner - Special Case Mode -->
-                            <div class="alert alert-warning mt-3" 
-                                 role="alert"
-                                 invisible="not special_case_mode">
-                                <i class="fa fa-exclamation-triangle"/> 
-                                <strong>Special Case Mode Active:</strong>
-                                <ul class="mb-0">
-                                    <li invisible="accrual_scenario != 'scenario_1'">
-                                        <strong>Scenario 1:</strong> Will create accruals regardless of CE status
-                                    </li>
-                                    <li invisible="accrual_scenario != 'scenario_2'">
-                                        <strong>Scenario 2:</strong> Will cancel <u>only posted/accrued</u> entries first, then create new ones.
-                                        Draft and cancelled accruals will be ignored.
-                                    </li>
-                                    <li invisible="accrual_scenario != 'scenario_3'">
-                                        <strong>Scenario 3:</strong> Will create adjustment entries (only for SOs with existing accruals).
-                                        <strong>⚠️ NO auto-reversal - PERMANENT adjustments!</strong>
-                                        Amounts can be edited in draft before posting.
-                                    </li>
-                                </ul>
-                            </div>
+
                         </page>
                         
                         <!-- ========== Page 2: Existing Accruals Review ========== -->
@@ -248,7 +218,7 @@
                                     <!-- Clickable Tags for Existing Accruals -->
                                     <field name="existing_accrual_ids" 
                                            widget="many2many_tags" 
-                                           string="Existing Accruals (Click to Open)"/>
+                                           string="Existing Accruals"/>
                                 </list>
                                 
                                 <!-- Form View (when clicking on a line) -->
@@ -287,7 +257,7 @@
                                         
                                         <!-- Existing Accruals Details -->
                                         <notebook>
-                                            <page string="Existing Accruals for This Period" 
+                                            <page string="Existing Accruals" 
                                                   name="accruals">
                                                 
                                                 <field name="existing_accrual_ids" 
@@ -340,16 +310,14 @@
                                                 <div class="alert alert-info mt-3" 
                                                      role="alert" 
                                                      invisible="not existing_accrual_ids">
-                                                    <i class="fa fa-info-circle"/> 
-                                                    <strong>Tip:</strong> Click on any accrual row above to open the full record and view all details including journal entries.
+                                                    Click any row to view full accrual details and journal entries.
                                                 </div>
                                                 
                                                 <!-- Help Text - No Accruals -->
                                                 <div class="alert alert-warning mt-3" 
                                                      role="alert" 
                                                      invisible="existing_accrual_ids">
-                                                    <i class="fa fa-exclamation-triangle"/> 
-                                                    No existing accruals found for this sale order in the current period.
+                                                    No existing accruals found for this period.
                                                 </div>
                                             </page>
                                         </notebook>

@@ -150,7 +150,8 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                 'An unexpected error occurred during accrual creation:\n%s\n\n'
                 'Please check the logs for more details.'
             ) % str(e))
-    
+
+            
     def _validate_scenario_compatibility(self, selected_lines):
         """
         Validate that selected SOs are compatible with chosen scenario
@@ -169,14 +170,13 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
             )
         
             if with_existing:
-                so_names = ', '.join(with_existing.mapped('sale_order_id.name'))
+                so_list = '\n'.join(f'  • {so}' for so in with_existing.mapped('sale_order_id.name'))
                 errors.append(_(
-                    '❌ Scenario 1 Not Allowed:\n'
-                    'The following Sale Orders already have existing accrual entries:\n'
+                    'Scenario 1 Error\n\n'
+                    'The following Sale Orders already have existing accruals:\n\n'
                     '%s\n\n'
-                    'Scenario 1 is only for creating NEW accruals. It cannot be used when an SO already '
-                    'has any accruals (draft or accrued).\n\n'
-                ) % so_names)
+                    'Scenario 1 can only be used for Sale Orders without any existing accruals.'
+                ) % so_list)
                         
             
         if self.accrual_scenario == 'scenario_2':
@@ -188,14 +188,13 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                     sos_without_accrued.append(line.sale_order_id.name)
             
             if sos_without_accrued:
-                so_names = ', '.join(sos_without_accrued)
+                so_list = '\n'.join(f'  • {so}' for so in sos_without_accrued)
                 errors.append(_(
-                    '❌ Scenario 2 Error:\n'
-                    'The following Sale Orders have NO existing accruals in "Accrued" state (only accrued entries can be replaced):\n'
+                    'Scenario 2 Error\n\n'
+                    'The following Sale Orders have no posted accruals to replace:\n\n'
                     '%s\n\n'
-                    '💡 Solution: Uncheck these SOs or ensure they have posted accrual entries.\n'
-                    'Note: Draft or cancelled accruals cannot be replaced - edit them directly or delete them.'
-                ) % so_names)
+                    'Scenario 2 requires existing accruals in "Accrued" state. Draft or cancelled accruals cannot be replaced.'
+                ) % so_list)
         
         elif self.accrual_scenario == 'scenario_3':
             # Scenario 3: Only SOs with existing accruals (must have at least one "accrued" entry)
@@ -215,27 +214,72 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
         
             # --- Error 1: SOs with NO accruals at all ---
             if sos_without_existing:
-                so_names = ', '.join(sos_without_existing)
+                so_list = '\n'.join(f'  • {so}' for so in sos_without_existing)
                 errors.append(_(
-                    '❌ Scenario 3 Error:\n'
-                    'The following Sale Orders have NO existing accruals and cannot have adjustments created:\n'
+                    'Scenario 3 Error\n\n'
+                    'The following Sale Orders have no existing accruals:\n\n'
                     '%s\n\n'
-                    '💡 Solution: Uncheck these SOs or use Scenario 1/2 instead.'
-                ) % so_names)
+                    'Scenario 3 creates adjustment entries and requires existing accruals to adjust.'
+                ) % so_list)
         
             # --- Error 2: SOs with accruals but none in "accrued" state ---
             if sos_without_accrued:
-                so_names_2 = ', '.join(sos_without_accrued)
+                so_list = '\n'.join(f'  • {so}' for so in sos_without_accrued)
                 errors.append(_(
-                    '❌ Scenario 3 Error:\n'
-                    'The following Sale Orders do not have any accruals in "Accrued" state:\n'
+                    'Scenario 3 Error\n\n'
+                    'The following Sale Orders have no posted accruals:\n\n'
                     '%s\n\n'
-                    '💡 Only posted (accrued) entries can be adjusted. Draft or cancelled entries must be edited or deleted.'
-                ) % so_names_2)
-
+                    'Scenario 3 requires accruals in "Accrued" state. Draft or cancelled accruals cannot be adjusted.'
+                ) % so_list)
+    
                     
         return errors
     
+    def _show_success_and_open_records(self, accrual_ids, title, summary_message):
+        """
+        Show success notification and open the list view of created records
+        
+        Args:
+            accrual_ids: List of created accrual record IDs
+            title: Notification title
+            summary_message: Summary message for notification
+            
+        Returns:
+            dict: Action to open list view with created records
+        """
+        if not accrual_ids:
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': title,
+                    'message': summary_message,
+                    'type': 'warning',
+                    'sticky': True,
+                }
+            }
+        
+        # Show notification and open records
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': title,
+                'message': summary_message,
+                'type': 'success',
+                'sticky': False,
+                'next': {
+                    'type': 'ir.actions.act_window',
+                    'name': _('Created Accrued Revenues'),
+                    'res_model': 'saatchi.accrued_revenue',
+                    'view_mode': 'list,form',
+                    'views': [(False, 'list'), (False, 'form')],
+                    'domain': [('id', 'in', accrual_ids)],
+                    'target': 'current',
+                }
+            }
+        }
+                    
     def _execute_default_scenario(self, selected_lines):
         """
         Default scenario: Create accruals for signed/billable SOs only
@@ -244,9 +288,10 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
             selected_lines: Wizard lines to process
             
         Returns:
-            dict: Notification action
+            dict: Notification and navigation to created records
         """
         created_count = 0
+        created_accrual_ids = []
         skipped_invalid_status = []
         skipped_no_lines = []
         failed_sos = []
@@ -269,6 +314,7 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                 
                 if result:
                     created_count += 1
+                    created_accrual_ids.append(result)
                     _logger.info(f"✓ Default: Created accrual {result} for SO {so.name}")
                 else:
                     skipped_no_lines.append(so.name)
@@ -280,51 +326,32 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                 failed_sos.append(f"{so.name} ({error_msg[:100]})")
                 continue
         
-        # Build detailed message
-        message_parts = []
-        
-        if created_count > 0:
-            message_parts.append(f'✅ Successfully created {created_count} accrual(s)')
+        # Build summary message
+        message_parts = [f'✅ Successfully created {created_count} accrual record(s)']
         
         if skipped_invalid_status:
             message_parts.append(
-                f'\n\n⚠️ Skipped {len(skipped_invalid_status)} SO(s) - Invalid Status:\n'
-                f'{chr(10).join("  • " + s for s in skipped_invalid_status)}\n'
-                f'💡 Use Scenario 1 (Manual Accrue) to override status validation'
+                f'\n⚠️ Skipped {len(skipped_invalid_status)} SO(s) due to invalid status'
             )
         
         if skipped_no_lines:
             message_parts.append(
-                f'\n\n⚠️ Skipped {len(skipped_no_lines)} SO(s) - No Eligible Lines:\n'
-                f'{chr(10).join("  • " + s for s in skipped_no_lines)}\n'
-                f'💡 Check: Agency Charges products, not fully invoiced'
+                f'\n⚠️ Skipped {len(skipped_no_lines)} SO(s) - no eligible lines'
             )
         
         if failed_sos:
             message_parts.append(
-                f'\n\n❌ Failed {len(failed_sos)} SO(s):\n'
-                f'{chr(10).join("  • " + s for s in failed_sos)}'
+                f'\n❌ Failed to create {len(failed_sos)} Accrual(s)'
             )
         
-        message = '\n'.join(message_parts) if message_parts else 'No accruals created.'
+        summary = '\n'.join(message_parts) if created_count > 0 else 'No accruals were created. Please check the criteria.'
         
-        if created_count > 0:
-            message += '\n\n🔄 Please refresh the page to view the new records.'
+        return self._show_success_and_open_records(
+            created_accrual_ids,
+            _('Accrual Creation Complete'),
+            summary
+        )
         
-        msg_type = 'success' if created_count > 0 and not failed_sos else 'warning' if created_count > 0 else 'danger'
-        
-        return {
-            'type': 'ir.actions.client',
-            'tag': 'display_notification',
-            'params': {
-                'title': _('Accrual Creation Complete'),
-                'message': message,
-                'type': msg_type,
-                'sticky': True,
-                'next': {'type': 'ir.actions.act_window_close'},
-            }
-        }
-    
     def _execute_scenario_1(self, selected_lines):
         """
         Scenario 1: Manual Accrue (Override Validation)
@@ -336,15 +363,16 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
             selected_lines: Wizard lines to process
             
         Returns:
-            dict: Notification action
+            dict: Notification and navigation to created records
         """
         created_count = 0
+        created_accrual_ids = []
         failed_sos = []
         
         for line in selected_lines:
             try:
                 result = line.sale_order_id.action_create_custom_accrued_revenue(
-                    is_override=True,  # Override validation
+                    is_override=True,
                     accrual_date=self.accrual_date,
                     reversal_date=self.reversal_date,
                     is_adjustment=False,
@@ -353,6 +381,7 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                 
                 if result:
                     created_count += 1
+                    created_accrual_ids.append(result)
                     _logger.info(f"✓ Scenario 1: Created accrual {result} for SO {line.sale_order_id.name}")
                 else:
                     error_msg = "No eligible lines found"
@@ -365,26 +394,19 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                 failed_sos.append(f"{line.sale_order_id.name} ({error_msg[:100]})")
                 continue
         
-        message = _(
-            'Scenario 1 Complete (Manual Accrue):\n'
-            '✓ %d accrual(s) created with override\n'
-            'Please refresh the page to view the records.'
-        ) % created_count
+        # Build summary message
+        summary_parts = [f'✅ Created {created_count} Accrual(s) with override (Scenario 1)']
         
         if failed_sos:
-            message += _('\n\n⚠ Failed to create accruals for:\n%s') % '\n'.join(f"  • {s}" for s in failed_sos)
+            summary_parts.append(f'\n❌ Failed: {len(failed_sos)} SO(s)')
         
-        return {
-            'type': 'ir.actions.client',
-            'tag': 'display_notification',
-            'params': {
-                'title': _('Scenario 1 Complete'),
-                'message': message,
-                'type': 'success' if not failed_sos else 'warning',
-                'sticky': True,
-                'next': {'type': 'ir.actions.act_window_close'},
-            }
-        }
+        summary = '\n'.join(summary_parts) if created_count > 0 else f'❌ Failed to create accruals for {len(failed_sos)} SO(s)'
+        
+        return self._show_success_and_open_records(
+            created_accrual_ids,
+            _('Scenario 1 Complete'),
+            summary
+        )
     
     def _execute_scenario_2(self, selected_lines):
         """
@@ -397,9 +419,10 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
             selected_lines: Wizard lines to process
             
         Returns:
-            dict: Notification action
+            dict: Notification and navigation to created records
         """
         created_count = 0
+        created_accrual_ids = []
         replaced_count = 0
         skipped_not_accrued = []
         failed_sos = []
@@ -410,7 +433,6 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                 accrued_records = line.existing_accrual_ids.filtered(lambda a: a.state == 'accrued' or a.state == 'reversed')
                 
                 if not accrued_records:
-                    # Skip if no accrued records found
                     skipped_not_accrued.append(f"{line.sale_order_id.name} (No posted accruals found)")
                     _logger.warning(f"⚠ Scenario 2: Skipped SO {line.sale_order_id.name} - no accrued state records to replace")
                     continue
@@ -433,6 +455,7 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                 
                 if result:
                     created_count += 1
+                    created_accrual_ids.append(result)
                     _logger.info(f"✓ Scenario 2: Created replacement accrual {result} for SO {line.sale_order_id.name}")
                 else:
                     error_msg = "No eligible lines found"
@@ -445,34 +468,27 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                 failed_sos.append(f"{line.sale_order_id.name} ({error_msg[:100]})")
                 continue
         
-        message = _(
-            'Scenario 2 Complete (Cancel & Replace):\n'
-            '✓ %d accrued record(s) cancelled\n'
-            '✓ %d new accrual(s) created\n'
-            'Please refresh the page to view the records.'
-        ) % (replaced_count, created_count)
+        # Build summary message
+        summary_parts = [
+            f'✅ Scenario 2: Cancelled {replaced_count} and created {created_count} Accrual(s)'
+        ]
         
         if skipped_not_accrued:
-            message += _('\n\nℹ Skipped %d SO(s) - No posted accruals to replace:\n%s\n💡 Draft accruals can be edited directly; cancelled accruals should be deleted.') % (
-                len(skipped_not_accrued),
-                '\n'.join(f"  • {s}" for s in skipped_not_accrued)
-            )
+            summary_parts.append(f'\nℹ️ Skipped {len(skipped_not_accrued)} SO(s) - no posted accruals')
         
         if failed_sos:
-            message += _('\n\n⚠ Failed to process:\n%s') % '\n'.join(f"  • {s}" for s in failed_sos)
+            summary_parts.append(f'\n❌ Failed: {len(failed_sos)} SO(s)')
         
-        return {
-            'type': 'ir.actions.client',
-            'tag': 'display_notification',
-            'params': {
-                'title': _('Scenario 2 Complete'),
-                'message': message,
-                'type': 'success' if created_count > 0 and not failed_sos else 'warning' if created_count > 0 else 'info',
-                'sticky': True,
-                'next': {'type': 'ir.actions.act_window_close'},
-            }
-        }
-    
+        summary = '\n'.join(summary_parts) if created_count > 0 else 'No records were created'
+        
+        return self._show_success_and_open_records(
+            created_accrual_ids,
+            _('Scenario 2 Complete'),
+            summary
+        )
+
+
+        
     def _execute_scenario_3(self, selected_lines):
         """
         Scenario 3: Create Adjustment Entry (NO Auto-Reversal)
@@ -489,9 +505,10 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
             selected_lines: Wizard lines to process
             
         Returns:
-            dict: Notification action
+            dict: Notification and navigation to created records
         """
         created_count = 0
+        created_accrual_ids = []
         skipped_count = 0
         failed_sos = []
         
@@ -508,12 +525,13 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                     is_override=False,
                     accrual_date=self.accrual_date,
                     reversal_date=False,
-                    is_adjustment=True,  # Create adjustment entry (NO reversal),
+                    is_adjustment=True,
                     is_system_generated=False
                 )
                 
                 if result:
                     created_count += 1
+                    created_accrual_ids.append(result)
                     _logger.info(f"✓ Scenario 3: Created adjustment entry {result} for SO {line.sale_order_id.name}")
                 else:
                     error_msg = "No accrual amount calculated"
@@ -526,33 +544,25 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                 failed_sos.append(f"{line.sale_order_id.name} ({error_msg[:100]})")
                 continue
         
-        message = _(
-            'Scenario 3 Complete (Adjustment Entry):\n'
-            '✓ %d adjustment entr(y/ies) created in draft\n'
-            '⚠️ IMPORTANT: These are PERMANENT adjustments with NO auto-reversal\n'
-            '💡 Edit the "Digital Income" line amount before posting\n'
-            '💡 Default amount shown is a suggestion based on current SO variance\n'
-            'Please refresh the page to view the records.'
-        ) % created_count
+        # Build summary message
+        summary_parts = [
+            f'✅ Created {created_count} adjustment entr(y/ies) in DRAFT',
+            '⚠️ Remember: Edit "Digital Income" amount before posting (NO auto-reversal)'
+        ]
         
         if skipped_count > 0:
-            message += _('\n\nℹ %d SO(s) skipped (no existing accruals)') % skipped_count
+            summary_parts.append(f'\nℹ️ Skipped {skipped_count} SO(s) - no existing accruals')
         
         if failed_sos:
-            message += _('\n\n⚠ Failed to create adjustments for:\n%s') % '\n'.join(f"  • {s}" for s in failed_sos)
+            summary_parts.append(f'\n❌ Failed: {len(failed_sos)} SO(s)')
         
-        return {
-            'type': 'ir.actions.client',
-            'tag': 'display_notification',
-            'params': {
-                'title': _('Scenario 3 Complete'),
-                'message': message,
-                'type': 'success' if not failed_sos else 'warning',
-                'sticky': True,
-                'next': {'type': 'ir.actions.act_window_close'},
-            }
-        }
-
+        summary = '\n'.join(summary_parts) if created_count > 0 else 'No adjustment entries were created'
+        
+        return self._show_success_and_open_records(
+            created_accrual_ids,
+            _('Scenario 3 Complete'),
+            summary
+        )
 
 class SaatchiAccruedRevenueWizardLine(models.TransientModel):
     """
