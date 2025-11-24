@@ -407,7 +407,7 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
         for line in selected_lines:
             try:
                 # Filter to only 'accrued' state records
-                accrued_records = line.existing_accrual_ids.filtered(lambda a: a.state == 'accrued')
+                accrued_records = line.existing_accrual_ids.filtered(lambda a: a.state == 'accrued' or a.state == 'reversed')
                 
                 if not accrued_records:
                     # Skip if no accrued records found
