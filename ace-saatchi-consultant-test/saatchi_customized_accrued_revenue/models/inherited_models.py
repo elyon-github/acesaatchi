@@ -95,6 +95,9 @@ class SaleOrder(models.Model):
         help="Difference between approved estimate and invoiced (revenue) - eligible for accrual"
     )
 
+    related_accrued_revenue_count = fields.Integer(string="Related Accrued Revenue Count", compute="_compute_related_accrued_revenue_count")
+
+    
     # ========== Compute Methods ==========
     
     @api.depends(
@@ -473,6 +476,23 @@ class SaleOrder(models.Model):
         
         return False
 
+    def action_view_accrued_revenues(self):
+        self.ensure_one()
+        return {
+            'name': 'Accrued Revenues',
+            'type': 'ir.actions.act_window',
+            'res_model': 'saatchi.accrued_revenue',
+            'view_mode': 'list,form',
+            'domain': [('x_related_ce_id', '=', self.id)],
+            'context': {'default_x_related_ce_id': self.id},
+        }
+
+        
+    def _compute_related_accrued_revenue_count(self):
+        for record in self:
+            record.related_accrued_revenue_count = self.env['saatchi.accrued_revenue'].search_count([
+                ('x_related_ce_id', '=', record.id)
+            ])
 
 class AccountMoveLine(models.Model):
     """
