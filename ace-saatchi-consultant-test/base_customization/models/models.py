@@ -23,7 +23,7 @@ class ClientProductCeCode(models.Model):
     def _compute_name(self):
         for record in self:
             if record.x_partner_id:
-                record.name = f"{record.x_partner_id.name}"
+                record.name = f"{record.x_partner_id.name} | {record.x_product_id.name}"
             else:
                 record.name = "CE Code | Blank"
                 
