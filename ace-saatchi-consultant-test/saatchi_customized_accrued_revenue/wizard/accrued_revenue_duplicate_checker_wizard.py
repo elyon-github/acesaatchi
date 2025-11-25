@@ -150,8 +150,8 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                 'An unexpected error occurred during accrual creation:\n%s\n\n'
                 'Please check the logs for more details.'
             ) % str(e))
-
-            
+    
+                
     def _validate_scenario_compatibility(self, selected_lines):
         """
         Validate that selected SOs are compatible with chosen scenario
@@ -163,6 +163,26 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
             list: Error messages (empty if valid)
         """
         errors = []
+        
+        # ========== UNIVERSAL VALIDATION: CE Code Required ==========
+        sos_without_ce_code = []
+        for line in selected_lines:
+            if not line.sale_order_id.x_ce_code:
+                sos_without_ce_code.append(line.sale_order_id.name)
+        
+        if sos_without_ce_code:
+            so_list = '\n'.join(f'  • {so}' for so in sos_without_ce_code)
+            errors.append(_(
+                'CE Code Missing\n\n'
+                'The following Sale Orders do not have a CE Code:\n\n'
+                '%s\n\n'
+                'Please make sure all SO have CE Code before proceeding.'
+            ) % so_list)
+            # Return early - no point checking other validations if CE codes are missing
+            return errors
+        
+        # ========== SCENARIO-SPECIFIC VALIDATIONS ==========
+        
         if self.accrual_scenario == 'scenario_1':
             # Filter lines where ANY existing accrual is draft or accrued
             with_existing = selected_lines.filtered(

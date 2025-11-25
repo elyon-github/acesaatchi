@@ -182,7 +182,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
     )
     
     x_accrual_system_generated = fields.Boolean(
-        string="System Generated",
+        string="Is System Generated?",
         default=True,
         help="Indicates if this accrual was generated automatically by the system"
     )
@@ -619,8 +619,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
                 'name': '/',
                 'date': self.reversal_date,
                 'x_related_custom_accrued_record': self.id,
-                'x_is_reversal': True,
-                'x_is_accrued_entry': False
+                'x_accrual_system_generated': self.x_accrual_system_generated,  # Pass through system flag
             }])
             reverse_move._post()
             self.related_reverse_accrued_entry = reverse_move.id
@@ -724,10 +723,10 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
 
         move_currency_id = self.currency_id.id if self.currency_id else company_currency.id
         
-        ref_prefix = 'Adjustment -  ' if self.is_adjustment_entry else 'Accrual - '
-        
+        ref_prefix = 'Adjustment - ' if self.is_adjustment_entry else 'Accrual - '
+    
         move_vals = {
-            'ref': f'{ref_prefix}{self.x_related_ce_id.name if self.x_related_ce_id else self.display_name}',
+            'ref': f'{ref_prefix}{self.ce_code if self.x_related_ce_id else self.display_name}',
             'journal_id': self.journal_id.id,
             'partner_id': self.ce_partner_id.id if self.ce_partner_id else False,
             'date': self.date,
@@ -736,8 +735,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
             'line_ids': [(0, 0, line_vals) for line_vals in move_line_vals],
             'x_related_custom_accrued_record': self.id,
             'x_remarks': self.remarks,
-            'x_accrual_system_generated': self.x_accrual_system_generated,
-            'x_is_accrued_entry': True if ref_prefix == 'Accrual - ' else False
+            'x_accrual_system_generated': self.x_accrual_system_generated,  # This will be used in compute
         }
         
         return move_vals

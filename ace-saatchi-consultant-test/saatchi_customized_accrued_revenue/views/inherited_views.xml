@@ -42,9 +42,6 @@
                            sum="VR"/>
                 
                 </xpath>
-
-
-    
             </field>
         </record>
 
@@ -63,9 +60,16 @@
                         <span class="o_stat_text">Accrual Record</span>
                     </div>
                 </button>
+                <button class="oe_stat_button" name="action_view_accrued_revenues_journal_items" type="object" icon="fa-bars" groups="account.group_account_manager" invisible="related_accrued_revenue_journal_items_count == 0">
+                    <div class="o_field_widget o_stat_info">
+                        <span class="o_stat_value"><field name="related_accrued_revenue_journal_items_count"/></span>
+                        <span class="o_stat_text">Journal Line Items</span>
+                    </div>
+                </button>
             </xpath>
         </field>
     </record>
+     
     <record id="res_config_settings_view_form_inherit_accrued_revenue" model="ir.ui.view">
         <field name="name">res.config.settings.view.form.inherit.accrued.revenue</field>
         <field name="model">res.config.settings</field>
@@ -91,7 +95,6 @@
             </xpath>
         </field>
     </record>
-
-        
+   
     </data>
 </odoo>
