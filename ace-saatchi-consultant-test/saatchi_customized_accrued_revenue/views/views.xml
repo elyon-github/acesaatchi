@@ -234,6 +234,8 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='date']" position="after">
                 <field name="x_studio_system_generated"/>
+                <field name="x_is_accrued_entry"/>
+                <field name="x_is_reversal"/>
             </xpath>
             <xpath expr="//field[@name='partner_id']" position="after">
                 <field name="x_ce_code" optional="show"/>

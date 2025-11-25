@@ -110,14 +110,14 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
     journal_id = fields.Many2one(
         'account.journal',
         string="Journal",
-        default=lambda self: self.env['account.journal'].browse(34),
+        default=lambda self: self._get_accrued_journal_id(),
         required=True
     )
 
     accrual_account_id = fields.Many2one(
         'account.account',
         string="Accrual Account",
-        default=lambda self: self.env['account.account'].search([('code', '=', '1210')], limit=1),
+        default=lambda self: self._get_accrued_revenue_account_id(),
         required=True,
         help="Account 1210 - Accrued Revenue. Debited for normal accruals, credited for adjustments"
     )
@@ -125,7 +125,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
     digital_income_account_id = fields.Many2one(
         'account.account',
         string="Digital Income Account",
-        default=lambda self: self.env['account.account'].browse(5787),
+        default=lambda self: self._get_adjustment_accrued_revenue_account_id(),
         help="Account used for adjustment entries (Dr. side)"
     )
 
@@ -312,6 +312,85 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         """Default to first day of current month"""
         today = fields.Date.context_today(self)
         return today.replace(day=1)
+
+    
+    def _get_accrued_revenue_account_id(self):
+        """Get accrued revenue account ID with fallback"""
+        try:
+            account_id = int(self.env['ir.config_parameter'].sudo().get_param(
+                'account.accrued_revenue_account_id',
+                default='0'
+            ) or 0)
+            
+            if account_id:
+                account = self.env['account.account'].sudo().browse(account_id)
+                if account.exists() and not account.deprecated:
+                    return account_id
+            
+            # Fallback: Find miscellaneous income account
+            misc_account = self.env['account.account'].sudo().search([
+                ('account_type', '=', 'income_other'),
+                ('deprecated', '=', False),
+                ('company_id', '=', self.env.company.id)
+            ], limit=1)
+            
+            return misc_account.id if misc_account else 0
+            
+        except (ValueError, TypeError):
+            return 0
+    
+    def _get_accrued_journal_id(self):
+        """Get accrued journal ID with fallback to miscellaneous journal"""
+        try:
+            journal_id = int(self.env['ir.config_parameter'].sudo().get_param(
+                'account.accrued_journal_id',
+                default='0'
+            ) or 0)
+            
+            if journal_id:
+                journal = self.env['account.journal'].sudo().browse(journal_id)
+                if journal.exists():
+                    return journal_id
+            
+            # Fallback: Find first general journal or miscellaneous journal
+            misc_journal = self.env['account.journal'].sudo().search([
+                ('type', '=', 'general'),
+                ('company_id', '=', self.env.company.id)
+            ], limit=1)
+            
+            return misc_journal.id if misc_journal else 0
+            
+        except (ValueError, TypeError):
+            return 0
+        
+    def _get_adjustment_accrued_revenue_account_id(self):
+        """Get adjustment accrued revenue account ID with fallback to default receivable account"""
+        try:
+            account_id = int(self.env['ir.config_parameter'].sudo().get_param(
+                'account.accrued_default_adjustment_account_id',
+                default='0'
+            ) or 0)
+            
+            if account_id:
+                account = self.env['account.account'].sudo().browse(account_id)
+                if account.exists() and not account.deprecated:
+                    return account_id
+            
+            # Fallback: Use company's default receivable account
+            receivable_account = self.env.company.account_default_pos_receivable_account_id
+            
+            if not receivable_account:
+                # Alternative: Search for receivable account
+                receivable_account = self.env['account.account'].sudo().search([
+                    ('account_type', '=', 'asset_receivable'),
+                    ('deprecated', '=', False),
+                    ('company_id', '=', self.env.company.id)
+                ], limit=1)
+            
+            return receivable_account.id if receivable_account else 0
+            
+        except (ValueError, TypeError):
+            return 0
 
     # ========== CRUD Operations ==========
     
@@ -539,7 +618,9 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
                 'ref': _('Reversal of: %s', move.ref),
                 'name': '/',
                 'date': self.reversal_date,
-                'x_related_custom_accrued_record': self.id
+                'x_related_custom_accrued_record': self.id,
+                'x_is_reversal': True,
+                'x_is_accrued_entry': False
             }])
             reverse_move._post()
             self.related_reverse_accrued_entry = reverse_move.id
@@ -643,7 +724,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
 
         move_currency_id = self.currency_id.id if self.currency_id else company_currency.id
         
-        ref_prefix = '[ADJUSTMENT] ' if self.is_adjustment_entry else 'Accrual - '
+        ref_prefix = 'Adjustment -  ' if self.is_adjustment_entry else 'Accrual - '
         
         move_vals = {
             'ref': f'{ref_prefix}{self.x_related_ce_id.name if self.x_related_ce_id else self.display_name}',
@@ -655,7 +736,8 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
             'line_ids': [(0, 0, line_vals) for line_vals in move_line_vals],
             'x_related_custom_accrued_record': self.id,
             'x_remarks': self.remarks,
-            'x_accrual_system_generated': self.x_accrual_system_generated
+            'x_accrual_system_generated': self.x_accrual_system_generated,
+            'x_is_accrued_entry': True if ref_prefix == 'Accrual - ' else False
         }
         
         return move_vals

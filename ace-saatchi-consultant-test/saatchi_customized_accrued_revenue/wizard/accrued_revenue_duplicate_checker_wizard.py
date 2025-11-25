@@ -344,7 +344,7 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
                 f'\n❌ Failed to create {len(failed_sos)} Accrual(s)'
             )
         
-        summary = '\n'.join(message_parts) if created_count > 0 else 'No accruals were created. Please check the criteria.'
+        summary = '\n'.join(message_parts) if created_count > 0 else 'No accruals were created. Please check the criteria. or Check the default accounts and journals in the configuration settings if set properly.'
         
         return self._show_success_and_open_records(
             created_accrual_ids,

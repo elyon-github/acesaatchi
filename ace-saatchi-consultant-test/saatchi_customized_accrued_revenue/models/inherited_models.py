@@ -494,31 +494,6 @@ class SaleOrder(models.Model):
                 ('x_related_ce_id', '=', record.id)
             ])
 
-class AccountMoveLine(models.Model):
-    """
-    Account Move Line Extension
-    
-    Adds custom fields for tracking CE-related information on journal entry lines.
-    """
-    _inherit = "account.move.line"
-
-    x_ce_code = fields.Char(
-        string="CE Code",
-        help="Contract Estimate code from sale order"
-    )
-
-    x_sale_order = fields.Many2one(related='move_id.x_related_custom_accrued_record.x_related_ce_id')
-    
-    x_ce_date = fields.Date(
-        string="CE Date",
-        help="Contract Estimate date from sale order"
-    )
-    
-    x_remarks = fields.Char(
-        string="Remarks",
-        help="Additional remarks for this journal entry line"
-    )
-
 
 class AccountMove(models.Model):
     """
@@ -545,6 +520,45 @@ class AccountMove(models.Model):
         string="System Generated",
         help="Indicates if this accrual was generated automatically by the system"
     )
+    x_is_reversal = fields.Boolean(string="Is Reversal Entry?")
+    
+    x_is_accrued_entry = fields.Boolean(string="Is Accrued Entry?")
+
+
+
+class AccountMoveLine(models.Model):
+    """
+    Account Move Line Extension
+    
+    Adds custom fields for tracking CE-related information on journal entry lines.
+    """
+    _inherit = "account.move.line"
+
+    x_ce_code = fields.Char(
+        string="CE Code",
+        help="Contract Estimate code from sale order"
+    )
+
+    x_sale_order = fields.Many2one(related='move_id.x_related_custom_accrued_record.x_related_ce_id')
+    
+    x_ce_date = fields.Date(
+        string="CE Date",
+        help="Contract Estimate date from sale order"
+    )
+    
+    x_remarks = fields.Char(
+        string="Remarks",
+        help="Additional remarks for this journal entry line"
+    )
+    
+    x_is_reversal = fields.Boolean(
+        string="Is Reversal Entry?",
+        related='move_id.x_is_reversal')
+    
+    x_is_accrued_entry = fields.Boolean(
+        string="Is Accrued Entry?",
+        related='move_id.x_is_accrued_entry')
+
 
 
 class GeneralLedgerCustomHandler(models.AbstractModel):
@@ -633,3 +647,32 @@ class GeneralLedgerCustomHandler(models.AbstractModel):
             full_query = SQL('%s LIMIT %s ', full_query, limit)
 
         return full_query
+
+
+
+class ResConfigSettings(models.TransientModel):
+    _inherit = 'res.config.settings'
+    
+    accrued_revenue_account_id = fields.Many2one(
+        'account.account',
+        string='Accrued Revenue Account',
+        config_parameter='account.accrued_revenue_account_id',
+        domain=[('deprecated', '=', False)],
+        help='Default account for accrued revenues'
+    )
+    
+    accrued_journal_id = fields.Many2one(
+        'account.journal',
+        string='Accrued Revenue Journal',
+        config_parameter='account.accrued_journal_id',
+        domain=[('type', '=', 'general')],
+        help='Default journal for accrued revenue entries'
+    )
+    
+    accrued_default_adjustment_account_id = fields.Many2one(
+        'account.account',
+        string='Default Accrual Adjustment Account',
+        config_parameter='account.accrued_default_adjustment_account_id',
+        domain=[('deprecated', '=', False)],
+        help='Default account for accrual adjustments, Account used for adjustment entries (Dr. side)'
+    )
