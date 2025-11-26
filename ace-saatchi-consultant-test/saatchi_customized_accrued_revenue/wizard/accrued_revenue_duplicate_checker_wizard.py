@@ -70,7 +70,7 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
     accrual_scenario = fields.Selection(
         [
             ('scenario_1', 'Scenario 1: Manual Accrue (Override Validation)'),
-            ('scenario_2', 'Scenario 2: Cancel & Replace Existing (Accrued State Only)'),
+            ('scenario_2', 'Scenario 2: Cancel & Replace Existing Accrue (Accrued/Reversed State Only)'),
             ('scenario_3', 'Scenario 3: Create Adjustment Entry (NO Auto-Reversal)')
         ],
         string="Accrual Scenario",

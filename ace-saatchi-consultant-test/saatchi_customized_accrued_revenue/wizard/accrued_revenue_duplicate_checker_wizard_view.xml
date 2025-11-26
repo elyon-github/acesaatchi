@@ -76,13 +76,13 @@
                          role="alert"
                          invisible="not special_case_mode">
                         <strong invisible="accrual_scenario != 'scenario_1'">Scenario 1:</strong>
-                        <span invisible="accrual_scenario != 'scenario_1'">Accruals will be created regardless of SO status</span>
+                        <span invisible="accrual_scenario != 'scenario_1'"> Accruals will be created regardless of SO status</span>
                         
                         <strong invisible="accrual_scenario != 'scenario_2'">Scenario 2:</strong>
-                        <span invisible="accrual_scenario != 'scenario_2'">Posted accruals will be cancelled and replaced with new entries</span>
+                        <span invisible="accrual_scenario != 'scenario_2'"> Posted accruals will be cancelled and replaced with new entries</span>
                         
                         <strong invisible="accrual_scenario != 'scenario_3'">Scenario 3:</strong>
-                        <span invisible="accrual_scenario != 'scenario_3'">Permanent adjustment entries will be created (no reversal). Edit amounts in draft before posting.</span>
+                        <span invisible="accrual_scenario != 'scenario_3'"> Permanent adjustment entries will be created (no reversal). Edit amounts in draft before posting.</span>
                     </div>
                     <!-- Warning Banner for Scenario 2 -->
                     <div class="alert alert-danger" 

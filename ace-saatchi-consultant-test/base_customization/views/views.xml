@@ -75,6 +75,7 @@
         </xpath>
         <xpath expr="//field[@name='payment_term_id']" position="after">
           <field name="x_alt_currency_id" options="{'no_create': True}" readonly="state in ['cancel', 'sale']"/>
+          <field name="x_ce_invoiced_billing" readonly="1"/>
         </xpath>
 
           <xpath expr="//form[1]/sheet[1]/notebook[1]/page[@name='order_lines']/field[@name='order_line']/list[1]/field[@name='price_unit']" position="after">
