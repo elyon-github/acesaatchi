@@ -675,9 +675,11 @@ class SaatchiAccruedRevenueWizardLine(models.TransientModel):
     )
     
     create_accrual = fields.Boolean(
-        string="Create",
+        string="Select",
         default=False,
-        help="Check to create accrual for this sale order"
+        help="Check to create accrual for this sale order",
+        store=True,
+        compute="_compute_create_accrual"
     )
 
     # ========== Compute Methods ==========
@@ -697,7 +699,7 @@ class SaatchiAccruedRevenueWizardLine(models.TransientModel):
             else:
                 line.existing_accrual_ids = [(5, 0, 0)]
     
-    @api.depends('existing_accrual_ids', 'existing_accrual_ids.total_debit_in_accrue_account')
+    @api.depends('existing_accrual_ids', 'existing_accrual_ids.total_debit_in_accrue_account' )
     def _compute_existing_accrual_total(self):
         """Calculate total from existing accruals"""
         for line in self:
@@ -706,7 +708,18 @@ class SaatchiAccruedRevenueWizardLine(models.TransientModel):
             )
 
             if line.existing_accrual_total:
+                # line.create_accrual = False
                 line.has_existing_accrual = True
             else:
+                # line.create_accrual = True
                 line.has_existing_accrual = False
+
+    @api.depends('wizard_id.accrual_date')
+    def _compute_create_accrual(self):
+        for record in self:
+            if record.existing_accrual_ids:
+                record.create_accrual = False
+            else:
+                record.create_accrual = True
+        
                 

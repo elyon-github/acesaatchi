@@ -518,7 +518,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
                                 'credit': credit_amount,
                                 'currency_id': record.currency_id.id,
                                 'analytic_distribution': analytic_distribution,
-                                'sequence': 1,
+                                'sequence': 999,
                             })
                 elif accrued_total_line:
                     # Delete if total is 0
@@ -578,7 +578,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
                                 'credit': 0.0,
                                 'currency_id': record.currency_id.id,
                                 'analytic_distribution': analytic_distribution,
-                                'sequence': 1,
+                                'sequence': 999,
                             })
                 elif accrued_total_line:
                     # Delete if total is 0

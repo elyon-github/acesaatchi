@@ -126,7 +126,7 @@
                                     <!-- Selection Toggle - First Column -->
                                     <field name="create_accrual" 
                                            widget="boolean_toggle"
-                                           string="Select"/>
+                                           string="Select" force_save="1" readonly="0"/>
                                     
                                     <!-- Sale Order Reference -->
                                     <field name="sale_order_id" 

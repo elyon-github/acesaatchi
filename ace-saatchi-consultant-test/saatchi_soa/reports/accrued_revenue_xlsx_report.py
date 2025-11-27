@@ -131,20 +131,20 @@ class AccruedRevenueXLSX(models.AbstractModel):
         }
 
     def _determine_accrual_months(self, lines):
-        """Determine ALL accrual months based on reversal dates (11/01/2025 → November 2025)"""
+        """Determine ALL accrual months based on accrual dates"""
         accrual_months = set()
         
-        # First, collect months from reversal dates
+        # Collect months from accrual dates
         for line in lines:
-            if line.x_type_of_entry in ['reversal_system', 'reversal_manual'] and line.date:
-                # Reversal date month IS the accrual month (11/01 → November)
+            if line.x_type_of_entry in ['accrued_system', 'accrued_manual'] and line.date:
+                # Accrual date month IS the accrual month
                 accrual_month = line.date.replace(day=1)
                 accrual_months.add(accrual_month)
         
-        # If no reversals found, collect from accrual dates
+        # If no accruals found, collect from reversal dates
         if not accrual_months:
             for line in lines:
-                if line.x_type_of_entry in ['accrued_system', 'accrued_manual'] and line.date:
+                if line.x_type_of_entry in ['reversal_system', 'reversal_manual'] and line.date:
                     accrual_month = line.date.replace(day=1)
                     accrual_months.add(accrual_month)
         
