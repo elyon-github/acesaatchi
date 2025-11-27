@@ -33,7 +33,7 @@
         <field name="name">saatchi.accrued_revenue.list</field>
         <field name="model">saatchi.accrued_revenue</field>
         <field name="arch" type="xml">
-            <list string="Accrued Revenues" js_class="button_in_list">
+            <list string="Accrued Revenues" js_class="button_in_list" create="false">
                 <header>
                     <button string="Create Entries" name="create_multiple_entries" type="object"/>
                 </header>
@@ -266,6 +266,7 @@
             <field eval="15" name="priority"/>
             <field name="arch" type="xml">
                 <search string="Search Journal Items">
+                    <field name="x_ce_code"/>
                     <field name="name" string="Journal Item" filter_domain="[
                         '|', '|', '|',
                         ('name', 'ilike', self), ('ref', 'ilike', self), ('account_id', 'ilike', self), ('partner_id', 'ilike', self)]"/>

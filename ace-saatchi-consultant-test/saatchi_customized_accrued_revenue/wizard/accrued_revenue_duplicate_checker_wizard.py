@@ -82,6 +82,15 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
         """
     )
 
+
+    # ========== Onchange Methods ==========
+
+    @api.onchange('accrual_date')
+    def onchange_reversal_date(self):
+        for record in self:
+            if record.accrual_date:
+                record.reversal_date = record.accrual_date + relativedelta(months=1, day=1)
+
     # ========== Compute Methods ==========
     
     @api.depends('so_line_ids.existing_accrual_ids')
@@ -645,7 +654,9 @@ class SaatchiAccruedRevenueWizardLine(models.TransientModel):
         string="Has Existing Accrual",
         default=False,
         readonly=True,
-        help="This sale order already has an accrual for this period"
+        help="This sale order already has an accrual for this period",
+        compute="_compute_existing_accrual_total",
+        store=True
     )
     
     existing_accrual_ids = fields.Many2many(
@@ -693,3 +704,9 @@ class SaatchiAccruedRevenueWizardLine(models.TransientModel):
             line.existing_accrual_total = sum(
                 line.existing_accrual_ids.mapped('total_debit_in_accrue_account')
             )
+
+            if line.existing_accrual_total:
+                line.has_existing_accrual = True
+            else:
+                line.has_existing_accrual = False
+                

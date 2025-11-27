@@ -414,59 +414,139 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
                 accrued_total_line.with_context(skip_total_update=True).write({
                     'account_id': record.accrual_account_id.id
                 })
-        
+            
     def update_total_accrued_line(self):
         """
         Update or create the Total Accrued line with computed total
         
         For normal accruals: Dr. Total Accrued (sum of credits)
-        For adjustments: Cr. Total Accrued (sum of debits)
+        For adjustments: Flexible based on which side has amounts
+            - If debit lines exist: Cr. Total Accrued (reducing accrual)
+            - If credit lines exist: Dr. Total Accrued (increasing accrual)
         """
         for record in self:
+            # Refresh to get latest lines (prevents duplicate detection issues)
+            record.line_ids.invalidate_recordset(['label'])
+            
+            # Find the Total Accrued line first
+            accrued_total_line = record.line_ids.filtered(lambda l: l.label == 'Total Accrued')
+            
             if record.is_adjustment_entry:
-                # Adjustment: sum debits for credit line
-                debit_lines = record.line_ids.filtered(lambda l: l.label != 'Total Accrued')
-                total = sum(debit_lines.mapped('debit'))
+                # Adjustment: support both directions
+                other_lines = record.line_ids.filtered(lambda l: l.label != 'Total Accrued')
+                total_debit = sum(other_lines.mapped('debit'))
+                total_credit = sum(other_lines.mapped('credit'))
                 
-                accrued_total_line = record.line_ids.filtered(lambda l: l.label == 'Total Accrued')
+                # Determine direction based on which side has amounts
+                if total_debit > 0 and total_credit == 0:
+                    # Dr. Digital Income | Cr. Accrued Revenue (reducing accrual)
+                    total = total_debit
+                    debit_amount = 0.0
+                    credit_amount = total
+                    analytic_distribution = self._calculate_weighted_analytic_distribution(other_lines)
+                elif total_credit > 0 and total_debit == 0:
+                    # Dr. Accrued Revenue | Cr. Digital Income (increasing accrual)
+                    total = total_credit
+                    debit_amount = total
+                    credit_amount = 0.0
+                    analytic_distribution = self._calculate_weighted_analytic_distribution(other_lines)
+                elif total_debit > 0 and total_credit > 0:
+                    # Mixed entries - net the amounts
+                    net_amount = abs(total_debit - total_credit)
+                    if total_debit > total_credit:
+                        # Net debit - so credit Total Accrued
+                        debit_amount = 0.0
+                        credit_amount = net_amount
+                    else:
+                        # Net credit - so debit Total Accrued
+                        debit_amount = net_amount
+                        credit_amount = 0.0
+                    total = net_amount
+                    analytic_distribution = self._calculate_weighted_analytic_distribution(other_lines)
+                else:
+                    # No amounts - delete Total Accrued line if it exists
+                    # if accrued_total_line:
+                    #     accrued_total_line.with_context(skip_total_update=True).unlink()
+                    continue
+                
+                # VALIDATION: Check against CE original amount
+                if record.ce_original_total_amount and total > record.ce_original_total_amount:
+                    raise UserError(_("Total accrued amount cannot exceed the original CE amount."))
+                
+                if not analytic_distribution and record.x_related_ce_id:
+                    if hasattr(record.x_related_ce_id, 'analytic_distribution') and record.x_related_ce_id.analytic_distribution:
+                        analytic_distribution = record.x_related_ce_id.analytic_distribution
                 
                 if total > 0:
                     if accrued_total_line:
-                        analytic_distribution = self._calculate_weighted_analytic_distribution(debit_lines)
+                        # Ensure we only have ONE Total Accrued line
+                        if len(accrued_total_line) > 1:
+                            # Keep the first one, delete the rest
+                            (accrued_total_line[1:]).with_context(skip_total_update=True).unlink()
+                            accrued_total_line = accrued_total_line[0]
                         
-                        if not analytic_distribution and record.x_related_ce_id:
-                            if hasattr(record.x_related_ce_id, 'analytic_distribution') and record.x_related_ce_id.analytic_distribution:
-                                analytic_distribution = record.x_related_ce_id.analytic_distribution
-                        
-                        # Use with_context to prevent recursion
+                        # Update existing line
                         accrued_total_line.with_context(skip_total_update=True).write({
-                            'credit': total,
-                            'debit': 0.0,
+                            'debit': debit_amount,
+                            'credit': credit_amount,
                             'account_id': record.accrual_account_id.id if record.accrual_account_id else accrued_total_line.account_id.id,
                             'currency_id': record.currency_id.id,
                             'analytic_distribution': analytic_distribution,
                         })
-                elif accrued_total_line and total == 0:
+                    else:
+                        # Double-check one more time before creating (in case of race condition)
+                        existing = self.env['saatchi.accrued_revenue_lines'].search([
+                            ('accrued_revenue_id', '=', record.id),
+                            ('label', '=', 'Total Accrued')
+                        ])
+                        if existing:
+                            # Update existing instead of creating
+                            existing.with_context(skip_total_update=True).write({
+                                'debit': debit_amount,
+                                'credit': credit_amount,
+                                'account_id': record.accrual_account_id.id,
+                                'currency_id': record.currency_id.id,
+                                'analytic_distribution': analytic_distribution,
+                            })
+                        else:
+                            # Create new Total Accrued line
+                            self.env['saatchi.accrued_revenue_lines'].with_context(skip_total_update=True).create({
+                                'accrued_revenue_id': record.id,
+                                'label': 'Total Accrued',
+                                'account_id': record.accrual_account_id.id,
+                                'debit': debit_amount,
+                                'credit': credit_amount,
+                                'currency_id': record.currency_id.id,
+                                'analytic_distribution': analytic_distribution,
+                                'sequence': 1,
+                            })
+                elif accrued_total_line:
+                    # Delete if total is 0
                     accrued_total_line.with_context(skip_total_update=True).unlink()
+                    
             else:
                 # Normal accrual: sum credits for debit line
                 credit_lines = record.line_ids.filtered(lambda l: l.label != 'Total Accrued')
                 total = sum(credit_lines.mapped('credit'))
                 
-                accrued_total_line = record.line_ids.filtered(lambda l: l.label == 'Total Accrued')
-                
                 if total > 0:
+                    # VALIDATION: Check against CE original amount
+                    if record.ce_original_total_amount and total > record.ce_original_total_amount:
+                        raise UserError(_("Total accrued amount cannot exceed the original CE amount."))
+                    
+                    analytic_distribution = self._calculate_weighted_analytic_distribution(credit_lines)
+                    
+                    if not analytic_distribution and record.x_related_ce_id:
+                        if hasattr(record.x_related_ce_id, 'analytic_distribution') and record.x_related_ce_id.analytic_distribution:
+                            analytic_distribution = record.x_related_ce_id.analytic_distribution
+                    
                     if accrued_total_line:
-                        if record.ce_original_total_amount and total > record.ce_original_total_amount:
-                            raise UserError(_("Total accrued amount cannot exceed the original CE amount."))
+                        # Ensure we only have ONE Total Accrued line
+                        if len(accrued_total_line) > 1:
+                            (accrued_total_line[1:]).with_context(skip_total_update=True).unlink()
+                            accrued_total_line = accrued_total_line[0]
                         
-                        analytic_distribution = self._calculate_weighted_analytic_distribution(credit_lines)
-                        
-                        if not analytic_distribution and record.x_related_ce_id:
-                            if hasattr(record.x_related_ce_id, 'analytic_distribution') and record.x_related_ce_id.analytic_distribution:
-                                analytic_distribution = record.x_related_ce_id.analytic_distribution
-                        
-                        # Use with_context to prevent recursion
+                        # Update existing line
                         accrued_total_line.with_context(skip_total_update=True).write({
                             'debit': total,
                             'credit': 0.0,
@@ -474,9 +554,36 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
                             'currency_id': record.currency_id.id,
                             'analytic_distribution': analytic_distribution,
                         })
-                elif accrued_total_line and total == 0:
+                    else:
+                        # Double-check before creating
+                        existing = self.env['saatchi.accrued_revenue_lines'].search([
+                            ('accrued_revenue_id', '=', record.id),
+                            ('label', '=', 'Total Accrued')
+                        ])
+                        if existing:
+                            existing.with_context(skip_total_update=True).write({
+                                'debit': total,
+                                'credit': 0.0,
+                                'account_id': record.accrual_account_id.id,
+                                'currency_id': record.currency_id.id,
+                                'analytic_distribution': analytic_distribution,
+                            })
+                        else:
+                            # Create new Total Accrued line
+                            self.env['saatchi.accrued_revenue_lines'].with_context(skip_total_update=True).create({
+                                'accrued_revenue_id': record.id,
+                                'label': 'Total Accrued',
+                                'account_id': record.accrual_account_id.id,
+                                'debit': total,
+                                'credit': 0.0,
+                                'currency_id': record.currency_id.id,
+                                'analytic_distribution': analytic_distribution,
+                                'sequence': 1,
+                            })
+                elif accrued_total_line:
+                    # Delete if total is 0
                     accrued_total_line.with_context(skip_total_update=True).unlink()
-    
+        
     def _calculate_weighted_analytic_distribution(self, lines):
         """
         Calculate weighted analytic distribution from lines
