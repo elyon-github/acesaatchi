@@ -80,7 +80,7 @@
 
         
         <xpath expr="//form[1]/sheet[1]/notebook[1]" position="inside">
-          <page string="Unbilled Estimate Report" name="studio_page_r5_1jb1eu01c">
+          <page string="Unbilled Estimate Report" name="studio_page_r5_1jb1eu01c" invisible="not x_ce_code">
             <group name="studio_group_r5">
               <group name="studio_group_r5_left">
                 <field name="currency_id" invisible="1"/>
