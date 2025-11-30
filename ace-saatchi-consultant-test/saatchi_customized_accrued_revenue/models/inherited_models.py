@@ -438,7 +438,7 @@ class SaleOrder(models.Model):
     def _compute_related_accrued_revenue_journal_items_count(self):
         for record in self:
             record.related_accrued_revenue_journal_items_count = self.env['account.move.line'].search_count([
-                ('x_ce_code', '=', record.x_ce_code)
+                ('x_ce_code', '=', record.x_ce_code), ('x_type_of_entry', '!=', False)
             ])
             
 class AccountMove(models.Model):
