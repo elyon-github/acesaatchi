@@ -134,9 +134,9 @@ class ResConfigSettings(models.TransientModel):
             # 销售提成，自用
             # 'sale.commission.line',
             # 不能删除报价单模板
-            'sale.order.template.option',
-            'sale.order.template.line',
-            'sale.order.template',
+            # 'sale.order.template.option',
+            # 'sale.order.template.line',
+            # 'sale.order.template',
             'sale.requisition.line',
             'sale.requisition',
         ]
