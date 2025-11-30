@@ -511,7 +511,8 @@ class AccountMove(models.Model):
     x_alt_currency_id = fields.Many2one(
         'res.currency',
         store=True,
-        compute="_compute_x_alt_currency_id"
+        compute="_compute_x_alt_currency_id",
+        string="Alt Currency"
     )
 
 
@@ -537,11 +538,12 @@ class AccountMove(models.Model):
 
             # if not alt_currency or not record.x_related_so:
             #     continue
+            # raise UserError('eh')
             for line in record.invoice_line_ids:
-                line.fx_currency_id = line.purchase_order_id.x_alt_currency_id
+                line.fx_currency_id = record.x_related_so.x_alt_currency_id.id or line.purchase_order_id.x_alt_currency_id.id
                 line.fx_price_unit = line.currency_id._convert(
                     line.price_unit,
-                    line.purchase_order_id.x_alt_currency_id,
+                    line.fx_currency_id,
                     record.company_id or record.env.company,
                     record.x_related_so.date_order or line.purchase_order_id.create_date
                 )
@@ -550,7 +552,7 @@ class AccountMove(models.Model):
     def _compute_x_alt_currency_id(self):
         for record in self:
             if record.invoice_line_ids:
-                record.x_alt_currency_id = record.invoice_line_ids[0].purchase_order_id.x_alt_currency_id
+                record.x_alt_currency_id = record.invoice_line_ids[0].fx_currency_id
         
 
     @api.depends('invoice_line_ids.fx_price_unit', 'invoice_line_ids.fx_currency_id', 'state')
@@ -589,7 +591,7 @@ class AccountMoveLine(models.Model):
     fx_currency_id = fields.Many2one(
         'res.currency', 
         string="Alt Currency",
-        related='move_id.x_alt_currency_id'
+        # related='move_id.x_alt_currency_id'
     )
     fx_price_unit = fields.Float(
         string="Alt Unit Price",
