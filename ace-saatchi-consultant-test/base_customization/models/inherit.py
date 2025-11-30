@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 from odoo import models, fields, api
 from odoo.exceptions import UserError, ValidationError
+from dateutil.relativedelta import relativedelta
+
+
+
 class InheritSaleOrder(models.Model):
     _inherit = 'sale.order'
     
@@ -506,7 +510,8 @@ class AccountMove(models.Model):
 
     x_alt_currency_id = fields.Many2one(
         'res.currency',
-        related='x_related_so.x_alt_currency_id'
+        store=True,
+        compute="_compute_x_alt_currency_id"
     )
 
 
@@ -529,20 +534,24 @@ class AccountMove(models.Model):
     def _apply_alt_currency_conversion(self):
         """Update all order lines with fx_currency and converted price."""
         for record in self:
-            alt_currency = record.x_alt_currency_id
-            if not alt_currency or not record.x_related_so:
-                continue
 
+            # if not alt_currency or not record.x_related_so:
+            #     continue
             for line in record.invoice_line_ids:
-                line.fx_currency_id = alt_currency
+                line.fx_currency_id = line.purchase_order_id.x_alt_currency_id
                 line.fx_price_unit = line.currency_id._convert(
                     line.price_unit,
-                    alt_currency,
+                    line.purchase_order_id.x_alt_currency_id,
                     record.company_id or record.env.company,
-                    record.x_related_so.date_order
+                    record.x_related_so.date_order or line.purchase_order_id.create_date
                 )
                 
-
+    @api.depends('name')
+    def _compute_x_alt_currency_id(self):
+        for record in self:
+            if record.invoice_line_ids:
+                record.x_alt_currency_id = record.invoice_line_ids[0].purchase_order_id.x_alt_currency_id
+        
 
     @api.depends('invoice_line_ids.fx_price_unit', 'invoice_line_ids.fx_currency_id', 'state')
     def _compute_alt_currency_amount(self):
@@ -550,7 +559,7 @@ class AccountMove(models.Model):
         for record in self:
             total = 0.0
             alt_currency = record.x_alt_currency_id or record.company_id.currency_id
-
+            
             if not record.x_alt_currency_id:
                 record.x_alt_currency_amount = 0
                 continue
@@ -661,10 +670,45 @@ class PurchaseOrder(models.Model):
 
 
 
+
 class HrLeave(models.Model):
     _inherit = 'hr.leave'
+    
+    @api.model
+    def create(self, vals):
+        # Check if employee_id and holiday_status_id are in vals
+        if vals.get('employee_id') and vals.get('holiday_status_id') == 5:
+            # Get the employee record
+            employee = self.env['hr.employee'].browse(vals.get('employee_id'))
+            
+            # Check if employment start date is set
+            if employee.x_studio_employment_start_date:
+                # Get the request date from vals
+                request_date = fields.Date.from_string(vals.get('request_date_from'))
+                employment_start = employee.x_studio_employment_start_date
+                delta = relativedelta(request_date, employment_start)
+                
+                # Calculate when 6 months will be completed
+                six_months_date = employment_start + relativedelta(months=6)
+                remaining_delta = relativedelta(six_months_date, request_date)
+                
+                # If less than 6 months at the time of request, raise error with details
+                if delta.months < 6 and delta.years == 0:
+                    raise UserError(
+                        f'You are still in probationary period.\n\n'
+                        f'Employment Start Date: {employment_start.strftime("%B %d, %Y")}\n'
+                        f'Requested Leave Date: {request_date.strftime("%B %d, %Y")}\n'
+                        f'Time Employed by Request Date: {delta.months} month(s) and {delta.days} day(s)\n'
+                        f'Remaining Time: {remaining_delta.months} month(s) and {remaining_delta.days} day(s)\n'
+                        f'This time off type can be used starting {six_months_date.strftime("%B %d, %Y")}.'
+                    )
+        
+        # Call the parent create method
+        res = super(HrLeave, self).create(vals)
+        
+        return res
 
-
+    
     def _get_responsible_for_approval(self):
         self.ensure_one()
         responsible = self.env['res.users']
@@ -682,3 +726,9 @@ class HrLeave(models.Model):
                 responsible = self.employee_id.parent_id.user_id
         
         return responsible
+
+
+
+
+
+
