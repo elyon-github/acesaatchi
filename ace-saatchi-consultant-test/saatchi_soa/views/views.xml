@@ -1,60 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
 <odoo>
-  <data>
-    <!-- explicit list view definition -->
-<!--
-    <record model="ir.ui.view" id="saatchi_soa.list">
-      <field name="name">saatchi_soa list</field>
-      <field name="model">saatchi_soa.saatchi_soa</field>
-      <field name="arch" type="xml">
-        <list>
-          <field name="name"/>
-          <field name="value"/>
-          <field name="value2"/>
-        </list>
-      </field>
+    <!-- Inherit account.move.line list view to add custom controller -->
+    <record id="view_accrued_revenue_journal_items_list_inherit" model="ir.ui.view">
+        <field name="name">account.move.line.list.accrued.revenue.inherit</field>
+        <field name="model">account.move.line</field>
+        <field name="inherit_id" ref="saatchi_customized_accrued_revenue.view_accrued_revenue_journal_items_list"/>
+        <field name="arch" type="xml">
+            <list position="attributes">
+                <attribute name="js_class">accrued_revenue_list_view</attribute>
+            </list>
+        </field>
     </record>
--->
-
-    <!-- actions opening views on models -->
-<!--
-    <record model="ir.actions.act_window" id="saatchi_soa.action_window">
-      <field name="name">saatchi_soa window</field>
-      <field name="res_model">saatchi_soa.saatchi_soa</field>
-      <field name="view_mode">list,form</field>
-    </record>
--->
-
-    <!-- server action to the one above -->
-<!--
-    <record model="ir.actions.server" id="saatchi_soa.action_server">
-      <field name="name">saatchi_soa server</field>
-      <field name="model_id" ref="model_saatchi_soa_saatchi_soa"/>
-      <field name="state">code</field>
-      <field name="code">
-        action = {
-          "type": "ir.actions.act_window",
-          "view_mode": "list,form",
-          "res_model": model._name,
-        }
-      </field>
-    </record>
--->
-
-    <!-- Top menu item -->
-<!--
-    <menuitem name="saatchi_soa" id="saatchi_soa.menu_root"/>
--->
-    <!-- menu categories -->
-<!--
-    <menuitem name="Menu 1" id="saatchi_soa.menu_1" parent="saatchi_soa.menu_root"/>
-    <menuitem name="Menu 2" id="saatchi_soa.menu_2" parent="saatchi_soa.menu_root"/>
--->
-    <!-- actions -->
-<!--
-    <menuitem name="List" id="saatchi_soa.menu_1_list" parent="saatchi_soa.menu_1"
-              action="saatchi_soa.action_window"/>
-    <menuitem name="Server to list" id="saatchi_soa" parent="saatchi_soa.menu_2"
-              action="saatchi_soa.action_server"/>
--->
-  </data>
 </odoo>

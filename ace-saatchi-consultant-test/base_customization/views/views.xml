@@ -75,7 +75,7 @@
         </xpath>
         <xpath expr="//field[@name='payment_term_id']" position="after">
           <field name="x_alt_currency_id" options="{'no_create': True}" readonly="state in ['cancel', 'sale']"/>
-          <field name="x_remarks"/>
+          <field name="x_remarks" />
         </xpath>
 
         
@@ -119,6 +119,14 @@
                 <field name="currency_id" column_invisible="1"/>
                 <field name="fx_price_unit" optional="show"/>
                 <field name="fx_currency_id" optional="show" readonly="1"/>
+            </xpath>
+
+            <!-- From Odoo Studio -->
+            <xpath expr="//form[1]/sheet[1]/group[1]/group[1]/field[@name='currency_id']" position="after">
+              <field name="x_studio_other_job_description_please_specify" />
+            </xpath>
+            <xpath expr="//field[@name='origin']" position="after">
+              <field name="x_studio_sales_order" readonly="1"/>
             </xpath>
         </field>
     </record>

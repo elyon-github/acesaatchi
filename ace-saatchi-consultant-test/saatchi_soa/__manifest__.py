@@ -18,18 +18,24 @@ Long description of module's purpose
     'version': '0.1',
 
     # any module necessary for this one to work correctly
-    'depends': ['base', 'report_xlsx'],
+    'depends': ['base', 'report_xlsx', 'account', 'saatchi_customized_accrued_revenue'],
 
     # always loaded
     'data': [
-        # 'security/ir.model.access.csv',
+        'security/ir.model.access.csv',
         'views/views.xml',
-        'views/templates.xml',
-        'reports/soa_xlsx_report.xml'
+        'views/accrued_revenue_wizard_view.xml',
+        'reports/saatchi_xlsx_reports.xml'
     ],
     # only loaded in demonstration mode
     'demo': [
         'demo/demo.xml',
     ],
-}
 
+    'assets': {
+        'web.assets_backend': [
+            'saatchi_soa/static/src/js/accrued_revenue_list_controller.js',
+            'saatchi_soa/static/src/xml/accrued_revenue_list_buttons.xml',
+        ],
+    },
+}

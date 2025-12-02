@@ -14,7 +14,7 @@
 
     <!-- ========== Wizard Form View ========== -->
     <record id="view_accrued_revenue_wizard_form" model="ir.ui.view">
-        <field name="name">saatchi.accrued.revenue.wizard.form</field>
+        <field name="name">saatchi.accrued.revenue_report.wizard.form</field>
         <field name="model">saatchi.accrued_revenue.wizard</field>
         <field name="arch" type="xml">
             <form string="Create Accrued Revenue">

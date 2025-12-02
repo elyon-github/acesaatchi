@@ -35,15 +35,23 @@ class ResConfigSettings(models.TransientModel):
                                         config_parameter='app_show_poweredby')
     group_show_author_in_apps = fields.Boolean(string="Show Author in Apps Dashboard", implied_group='app_odoo_customize.group_show_author_in_apps',
                                                help="Uncheck to Hide Author and Website in Apps Dashboard")
-    module_odoo_referral = fields.Boolean('Show Odoo Referral', help="Uncheck to remove the Odoo Referral")
+    module_odoo_referral = fields.Boolean(
+        'Show Odoo Referral', help="Uncheck to remove the Odoo Referral")
 
-    app_documentation_url = fields.Char('Documentation Url', config_parameter='app_documentation_url')
-    app_documentation_dev_url = fields.Char('Developer Documentation Url', config_parameter='app_documentation_dev_url')
-    app_support_url = fields.Char('Support Url', config_parameter='app_support_url')
-    app_account_title = fields.Char('My Odoo.com Account Title', config_parameter='app_account_title')
-    app_account_url = fields.Char('My Odoo.com Account Url', config_parameter='app_account_url')
-    app_enterprise_url = fields.Char('Customize Module Url(eg. Enterprise)', config_parameter='app_enterprise_url')
-    app_ribbon_name = fields.Char('Show Demo Ribbon', config_parameter='app_ribbon_name')
+    app_documentation_url = fields.Char(
+        'Documentation Url', config_parameter='app_documentation_url')
+    app_documentation_dev_url = fields.Char(
+        'Developer Documentation Url', config_parameter='app_documentation_dev_url')
+    app_support_url = fields.Char(
+        'Support Url', config_parameter='app_support_url')
+    app_account_title = fields.Char(
+        'My Odoo.com Account Title', config_parameter='app_account_title')
+    app_account_url = fields.Char(
+        'My Odoo.com Account Url', config_parameter='app_account_url')
+    app_enterprise_url = fields.Char(
+        'Customize Module Url(eg. Enterprise)', config_parameter='app_enterprise_url')
+    app_ribbon_name = fields.Char(
+        'Show Demo Ribbon', config_parameter='app_ribbon_name')
     app_navbar_pos_pc = fields.Selection(string="Navbar PC", selection=[
         ('top', 'Top(Default)'),
         ('bottom', 'Bottom'),
@@ -54,34 +62,40 @@ class ResConfigSettings(models.TransientModel):
         ('bottom', 'Bottom'),
         # ('left', 'Left'),
     ], config_parameter='app_navbar_pos_mobile')
-    
+
     # 安全与提速
     app_debug_only_admin = fields.Boolean('Debug for Admin', config_parameter='app_debug_only_admin',
                                           help="Check to only Debug / Debug Assets for Odoo Admin. Deny debug from url for other user.")
     app_stop_subscribe = fields.Boolean('Stop Odoo Subscribe', help="Check to stop subscribe and follow. This to make odoo speed up.",
                                         config_parameter='app_stop_subscribe')
     # 处理额外模块
-    module_app_odoo_doc = fields.Boolean("Help Document Anywhere", help='Get Help Documentation on current odoo operation or topic.')
-    module_app_chatgpt = fields.Boolean("Ai Center", help='Use Ai to boost you business.')
-    
+    module_app_odoo_doc = fields.Boolean(
+        "Help Document Anywhere", help='Get Help Documentation on current odoo operation or topic.')
+    module_app_chatgpt = fields.Boolean(
+        "Ai Center", help='Use Ai to boost you business.')
+
     # 应用帮助文档
-    app_doc_root_url = fields.Char('Help of topic domain', config_parameter='app_doc_root_url', default='https://odooai.cn')
+    app_doc_root_url = fields.Char(
+        'Help of topic domain', config_parameter='app_doc_root_url', default='https://odooai.cn')
 
     @api.model
     def set_module_url(self, rec=None):
         if not self._app_check_sys_op():
             raise UserError(_('Not allow.'))
         config_parameter = self.env['ir.config_parameter'].sudo()
-        app_enterprise_url = config_parameter.get_param('app_enterprise_url', 'https://www.odooai.cn')
-        modules = self.env['ir.module.module'].search([('license', 'like', 'OEEL%'), ('website', '!=', False)])
+        app_enterprise_url = config_parameter.get_param(
+            'app_enterprise_url', 'https://www.odooai.cn')
+        modules = self.env['ir.module.module'].search(
+            [('license', 'like', 'OEEL%'), ('website', '!=', False)])
         if modules:
-            sql = "UPDATE ir_module_module SET website = '%s' WHERE id IN %s" % (app_enterprise_url, tuple(modules.ids))
+            sql = "UPDATE ir_module_module SET website = '%s' WHERE id IN %s" % (
+                app_enterprise_url, tuple(modules.ids))
             try:
                 self._cr.execute(sql)
             except Exception as e:
                 pass
 
-    # 清数据，o=对象, s=序列 
+    # 清数据，o=对象, s=序列
     def _remove_app_data(self, o, s=[]):
         if not self._app_check_sys_op():
             raise UserError(_('Not allow.'))
@@ -91,7 +105,8 @@ class ResConfigSettings(models.TransientModel):
                 if not self.env['ir.model']._get(line):
                     continue
             except Exception as e:
-                _logger.warning('remove data error get ir.model: %s,%s', line, e)
+                _logger.warning(
+                    'remove data error get ir.model: %s,%s', line, e)
                 continue
             obj_name = line
             obj = self.pool.get(obj_name)
@@ -110,7 +125,8 @@ class ResConfigSettings(models.TransientModel):
                 _logger.warning('remove data error: %s,%s', line, e)
         # 更新序号
         for line in s:
-            domain = ['|', ('code', '=ilike', line + '%'), ('prefix', '=ilike', line + '%')]
+            domain = ['|', ('code', '=ilike', line + '%'),
+                      ('prefix', '=ilike', line + '%')]
             try:
                 seqs = self.env['ir.sequence'].sudo().search(domain)
                 if seqs.exists():
@@ -120,7 +136,7 @@ class ResConfigSettings(models.TransientModel):
             except Exception as e:
                 _logger.warning('reset sequence data error: %s,%s', line, e)
         return True
-    
+
     def remove_sales(self):
         to_removes = [
             # 清除销售单据
@@ -216,6 +232,7 @@ class ResConfigSettings(models.TransientModel):
         ]
         seqs = [
             'hr.expense',
+            'hr.expense.sheet.claim_no'
         ]
         return self._remove_app_data(to_removes, seqs)
 
@@ -353,8 +370,10 @@ class ResConfigSettings(models.TransientModel):
         # todo: 要做 remove_hr，因为工资表会用到 account
         # 更新account关联，很多是多公司字段，故只存在 ir_property，故在原模型，只能用update
         try:
-            field1 = self.env['ir.model.fields']._get('product.template', "taxes_id").id
-            field2 = self.env['ir.model.fields']._get('product.template', "supplier_taxes_id").id
+            field1 = self.env['ir.model.fields']._get(
+                'product.template', "taxes_id").id
+            field2 = self.env['ir.model.fields']._get(
+                'product.template', "supplier_taxes_id").id
 
             sql = "delete from ir_default where (field_id = %s or field_id = %s) and company_id=%d" \
                   % (field1, field2, company_id)
@@ -363,7 +382,8 @@ class ResConfigSettings(models.TransientModel):
             self._cr.execute(sql2)
             self._cr.commit()
         except Exception as e:
-            _logger.error('remove data error: %s,%s', 'account_chart: set tax and account_journal', e)
+            _logger.error('remove data error: %s,%s',
+                          'account_chart: set tax and account_journal', e)
 
         # 增加对 pos的处理
         if self.env['ir.model']._get('pos.config'):
@@ -454,7 +474,8 @@ class ResConfigSettings(models.TransientModel):
                 'property_stock_journal',
             ]
             for name in todo_list:
-                field_id = self.env['ir.model.fields']._get('product.category', name).id
+                field_id = self.env['ir.model.fields']._get(
+                    'product.category', name).id
                 prop = self.env['ir.property'].sudo().search([
                     ('fields_id', '=', field_id),
                 ])
@@ -572,7 +593,7 @@ class ResConfigSettings(models.TransientModel):
             'event.event',
         ]
         return self._remove_app_data(to_removes, seqs)
-    
+
     def remove_website_blog(self):
         to_removes = [
             # 清除网站数据，w, w_blog
@@ -631,6 +652,33 @@ class ResConfigSettings(models.TransientModel):
         seqs = []
         return self._remove_app_data(to_removes, seqs)
 
+    def remove_hr_timeoff(self):
+        to_removes = [
+            # 清除请假
+            'hr.leave.allocation',
+            'hr.leave',
+        ]
+
+        return self._remove_app_data(to_removes, [])
+
+    def remove_custom_accrued_revenue(self):
+        to_removes = [
+            'saatchi.accrued_revenue.line',
+            'saatchi.accrued_revenue',
+        ]
+        return self._remove_app_data(to_removes, [])
+
+    def remove_all_custom(self):
+        self.remove_account()
+        self.remove_hr_timeoff()
+        self.remove_custom_accrued_revenue()
+        self.remove_inventory()
+        self.remove_sales()
+        self.remove_project()
+        self.remove_message()
+        self.remove_expense()
+        self.remove_purchase()
+
     def remove_all_biz(self):
         self.remove_account()
         self.remove_quality()
@@ -665,7 +713,8 @@ class ResConfigSettings(models.TransientModel):
         return True
 
     def action_set_app_doc_root_to_my(self):
-        base_url = self.env['ir.config_parameter'].sudo().get_param('web.base.url')
+        base_url = self.env['ir.config_parameter'].sudo(
+        ).get_param('web.base.url')
         self.app_doc_root_url = base_url
 
     # def action_set_all_to_app_doc_root_url(self):

@@ -31,7 +31,7 @@ class InheritSaleOrder(models.Model):
         default=lambda self: self._default_alt_currency_id(),
     )
 
-    x_remarks = fields.Char(string="Remarks")
+    x_remarks = fields.Char(string="Remarks", tracking=True)
 
     def write(self, vals):
         res = super().write(vals)

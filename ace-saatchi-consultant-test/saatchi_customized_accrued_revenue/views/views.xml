@@ -150,10 +150,10 @@
       <field name="arch" type="xml">
         
         <xpath expr="//field[@name='partner_id']" position="after">
+            <field name="x_ce_status"/>
          <field name="x_ce_code" readonly="1" invisible="not x_ce_code"/>
-         <field name="x_ce_status" readonly="state in ['cancel', 'sale']"/>
          <field name="x_job_description" readonly="state in ['cancel', 'sale']"/>
-         <field name="x_job_number" readonly="state in ['cancel', 'sale']"/>
+         <!-- <field name="x_job_number" readonly="state in ['cancel', 'sale']"/> -->
         </xpath>
         
       </field>

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Wizard Form View -->
+    <record id="view_accrued_revenue_wizard_form" model="ir.ui.view">
+        <field name="name">accrued.revenue_report.wizard.form</field>
+        <field name="model">accrued.revenue_report.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Generate Accrued Revenue Report">
+                <group>
+                    <group>
+                        <field name="start_date" 
+                               widget="date"
+                               options="{'datepicker': {'format': 'MM/yyyy'}}"/>
+                    </group>
+                    <group>
+                        <field name="end_date" 
+                               widget="date"
+                               options="{'datepicker': {'format': 'MM/yyyy'}}"/>
+                    </group>
+                </group>
+                
+                <div class="alert alert-info" role="alert">
+                    <strong>Note:</strong> The report will generate sheets for all months 
+                    between the selected dates. Previous month reversal entries will be 
+                    automatically included.
+                </div>
+                
+                <footer>
+                    <button name="action_print_report" 
+                            string="Generate Report" 
+                            type="object" 
+                            class="btn-primary"/>
+                    <button string="Cancel" 
+                            class="btn-secondary" 
+                            special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Wizard Action -->
+    <record id="action_accrued_revenue_wizard" model="ir.actions.act_window">
+        <field name="name">Generate Accrued Revenue Report</field>
+        <field name="res_model">accrued.revenue_report.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="binding_model_id" ref="account.model_account_move_line"/>
+        <field name="binding_view_types">list</field>
+    </record>
+
+
+    
+</odoo>
