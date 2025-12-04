@@ -201,6 +201,19 @@
                             <button string="Delete All MRP/Sale/Purchase/Account/MRP/Inventory/Project/Message/Workflow" type="object" name="remove_all_biz"
                                     confirm="Please confirm to delete the select data?" class="oe_highlight"/>
                         </div>
+
+                        <div class="col-12 col-lg-12 mb4">
+                            <span class="col-3 col-lg-2 text-left">Saatchi Custom</span>
+                            <button string="Delete All Saatchi Records" type="object" name="remove_all_custom" confirm="Please confirm to delete the select custom data for Saatchi?" class="oe_highlight"/>
+                        </div>
+                        <div class="col-12 col-lg-12 mb4">
+                            <span class="col-3 col-lg-2 text-left">HR Time Off</span>
+                            <button string="Delete All HR Time Off Records" type="object" name="remove_hr_timeoff" confirm="Please confirm to delete the select HR Time Off data?" class="oe_highlight"/>
+                        </div>
+                        <div class="col-12 col-lg-12 mb4">
+                            <span class="col-3 col-lg-2 text-left">Custom Accrued Revenue</span>
+                            <button string="Delete Custom Accrued Revenue Records" type="object" name="remove_custom_accrued_revenue" confirm="Please confirm to delete the select Custom Accrued Revenue data?" class="oe_highlight"/>
+                        </div>
                     </div>
                 </xpath>
 				<xpath expr="//block[@name='about_setting_container']//widget[@name='mobile_apps_funnel']" position="attributes">

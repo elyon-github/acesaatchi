@@ -12,7 +12,7 @@
     </record>
 
 
-    <record id="action_report_accrued_revenue_xlsx" model="ir.actions.report">
+    <!-- <record id="action_report_accrued_revenue_xlsx" model="ir.actions.report">
         <field name="name">Accrued Revenue Report (XLSX)</field>
         <field name="model">account.move.line</field>
         <field name="report_type">xlsx</field>
@@ -20,6 +20,16 @@
         <field name="report_file">accrued_revenue_xlsx</field>
         <field name="binding_model_id" ref="account.model_account_move_line"/>
         <field name="binding_type">report</field>
+    </record> -->
+
+
+    <record id="action_report_accrued_revenue_xlsx" model="ir.actions.report">
+        <field name="name">Accrued Revenue Report (XLSX)</field>
+        <field name="model">account.move.line</field>
+        <field name="report_type">xlsx</field>
+        <field name="report_name">accrued_revenue_xlsx</field>
+        <field name="report_file">accrued_revenue_xlsx</field>
+        <!-- REMOVED binding_model_id and binding_type -->
     </record>
 
     <record id="action_report_unbilled_estimate_xlsx" model="ir.actions.report">

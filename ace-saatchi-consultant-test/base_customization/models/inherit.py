@@ -4,18 +4,72 @@ from odoo.exceptions import UserError, ValidationError
 from dateutil.relativedelta import relativedelta
 
 
+class InheritUsers(models.Model):
+    _inherit = 'res.users'
+
+    x_client_assignment_ids = fields.One2many(
+        'base_customization.user_client_assignment',
+        'user_id',
+        string="Client Assignments"
+    )
+
+    # Computed fields for backward compatibility and easy filtering
+    x_client_ids = fields.Many2many(
+        'res.partner',
+        compute='_compute_assigned_clients_products',
+        string="Assigned Clients"
+    )
+
+    x_product_ids = fields.Many2many(
+        'product.template',
+        compute='_compute_assigned_clients_products',
+        string="Assigned Products"
+    )
+
+    @api.depends('x_client_assignment_ids.x_partner_id', 'x_client_assignment_ids.x_product_ids')
+    def _compute_assigned_clients_products(self):
+        """Compute flattened lists for easier domain usage"""
+        for user in self:
+            user.x_client_ids = user.x_client_assignment_ids.mapped(
+                'x_partner_id')
+            user.x_product_ids = user.x_client_assignment_ids.mapped(
+                'x_product_ids')
+
+
 class InheritSaleOrder(models.Model):
     _inherit = 'sale.order'
 
-    x_client_product_ce_code = fields.Many2one(
-        'base_customization.client_product_ce_co_line',  # Use the NEW separate model
-        string="Client - Product CE Code"
+    partner_id = fields.Many2one(
+        'res.partner',
+        domain=lambda self: [('id', 'in', self.env.user.x_client_ids.ids)]
+        if self.env.user.employee_id and
+        self.env.user.employee_id.department_id and
+        self.env.user.employee_id.department_id.name == 'ACCOUNTS'
+        else [('id', '!=', False)]  # This returns no records
     )
+
+    x_client_product_ce_code_domain = fields.Char(
+        compute='_compute_x_client_product_ce_code_domain'
+    )
+
+    x_client_product_ce_code = fields.Many2one(
+        'base_customization.client_product_ce_co_line',
+        string="Client - Product CE Code",
+        domain="x_client_product_ce_code_domain"
+    )
+
+    @api.depends('partner_id')
+    def _compute_x_client_product_ce_code_domain(self):
+        for record in self:
+            domain = [
+                ('x_client_product_ce_co_id.x_partner_id', '=', record.partner_id.id),
+                ('x_product_id', 'in', self.env.user.x_product_ids.ids)
+            ]
+            record.x_client_product_ce_code_domain = str(domain)
 
     x_job_description = fields.Char('Job Description')
     x_ce_code = fields.Char(compute="_compute_x_ce_code",
                             string="Client CE Code", store=True)
-    # x_ce_code = fields.Char( string="Client CE Code", store=True)
 
     x_alt_currency_amount = fields.Float(
         string="Alt Total Amount",
@@ -31,7 +85,7 @@ class InheritSaleOrder(models.Model):
         default=lambda self: self._default_alt_currency_id(),
     )
 
-    x_remarks = fields.Char(string="Remarks")
+    x_remarks = fields.Char(string="Remarks", tracking=True)
 
     def write(self, vals):
         res = super().write(vals)
@@ -697,6 +751,8 @@ class HrLeave(models.Model):
 
         return res
 
+    # TODO: Dynamic Approval in SL Type if self.duration_display > 3 days then the self.validation_type becomes 'both' else 'manager' only.
+    # TODO: Change Second Approval in State Color Purple
     def _get_responsible_for_approval(self):
         self.ensure_one()
         responsible = self.env['res.users']

@@ -38,12 +38,8 @@ class SaleOrder(models.Model):
         ],
         default='for_client_signature',
         required=True,
-        string='CE Status',
+        string='C.E. Status',
         tracking=True
-    )
-
-    x_job_number = fields.Char(
-        string="Job Number"
     )
 
     related_accrued_revenue_count = fields.Integer(
