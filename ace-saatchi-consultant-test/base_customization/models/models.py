@@ -8,16 +8,16 @@ class ClientProductCeCode(models.Model):
     _description = 'Client Product CE Code'
     _inherit = ['mail.thread']
     _rec_name = 'name'
-    
+
     name = fields.Char(string="Name", compute='_compute_name', store=True)
-    x_partner_id = fields.Many2one('res.partner', string="Contact / Customer", required=True)
-    
+    x_partner_id = fields.Many2one(
+        'res.partner', string="Contact / Customer", required=True)
+
     x_client_product_ce_co_line_ids = fields.One2many(
         'base_customization.client_product_ce_co_line',
         'x_client_product_ce_co_id',
         string="Client - Product CE Code"
     )
-
 
     @api.depends('x_partner_id')
     def _compute_name(self):
@@ -26,7 +26,7 @@ class ClientProductCeCode(models.Model):
                 record.name = f"{record.x_partner_id.name}"
             # else:
             #     record.name = "CE Code | Blank"
-                
+
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
@@ -35,13 +35,14 @@ class ClientProductCeCode(models.Model):
                     ('x_partner_id', '=', vals['x_partner_id'])
                 ], limit=1)
                 if existing:
-                    partner_name = self.env['res.partner'].browse(vals['x_partner_id']).name
+                    partner_name = self.env['res.partner'].browse(
+                        vals['x_partner_id']).name
                     raise ValidationError(
                         f"A CE Code record already exists for customer '{partner_name}'. "
                         f"\nPlease edit the existing record instead."
                     )
         return super(ClientProductCeCode, self).create(vals_list)
-    
+
     def write(self, vals):
         if 'x_partner_id' in vals:
             existing = self.search([
@@ -49,7 +50,8 @@ class ClientProductCeCode(models.Model):
                 ('id', '!=', self.id)
             ], limit=1)
             if existing:
-                partner_name = self.env['res.partner'].browse(vals['x_partner_id']).name
+                partner_name = self.env['res.partner'].browse(
+                    vals['x_partner_id']).name
                 raise ValidationError(
                     f"A CE Code record already exists for customer '{partner_name}'. "
                     f"\nPlease edit the existing record instead."
@@ -61,16 +63,17 @@ class ClientProductCELine(models.Model):
     _name = 'base_customization.client_product_ce_co_line'
     _description = 'Client Product CE Line (Master)'
     _rec_name = 'name'
-    
+
     name = fields.Char(string="Name", compute='_compute_name', store=True)
     x_client_product_ce_co_id = fields.Many2one(
         'base_customization.client_product_ce_code',
         string="Client Product CE Code",
         ondelete='cascade'
     )
-    x_product_id = fields.Many2one('product.template', string="Product", required=True)
+    x_product_id = fields.Many2one(
+        'product.template', string="Product", required=True)
     x_ce_product_code = fields.Char(string="CE Code", required=True)
-    
+
     @api.depends('x_product_id', 'x_ce_product_code')
     def _compute_name(self):
         for record in self:
@@ -88,7 +91,65 @@ class ClientProductCELine(models.Model):
 class SaleOrderCELine(models.Model):
     _name = 'base_customization.sale_order_ce_line'
     _description = 'Sale Order CE Line (Copy)'
-    
-    sale_order_id = fields.Many2one('sale.order', string="Sale Order", ondelete='cascade')
-    x_product_id = fields.Many2one('product.template', string="Product", required=True)
+
+    sale_order_id = fields.Many2one(
+        'sale.order', string="Sale Order", ondelete='cascade')
+    x_product_id = fields.Many2one(
+        'product.template', string="Product", required=True)
     x_ce_product_code = fields.Char(string="CE Code", required=True)
+
+
+class UserClientAssignment(models.Model):
+    _name = 'base_customization.user_client_assignment'
+    _description = 'User Client and Products Assignment'
+    _rec_name = 'x_partner_id'
+
+    user_id = fields.Many2one(
+        'res.users',
+        string="User",
+        required=True,
+        ondelete='cascade'
+    )
+
+    x_partner_id = fields.Many2one(
+        'res.partner',
+        string="Client",
+        required=True
+    )
+
+    x_product_ids = fields.Many2many(
+        'product.template',
+        string="Assigned Products",
+        domain="[('id', 'in', available_product_ids)]"
+    )
+
+    available_product_ids = fields.Many2many(
+        'product.template',
+        compute='_compute_available_product_ids',
+        string="Available Products"
+    )
+
+    @api.depends('x_partner_id')
+    def _compute_available_product_ids(self):
+        """Get products that are assigned to this partner in CE Code lines"""
+        for record in self:
+            if record.x_partner_id:
+                # Find the CE Code record for this partner
+                ce_code = self.env['base_customization.client_product_ce_code'].search([
+                    ('x_partner_id', '=', record.x_partner_id.id)
+                ], limit=1)
+
+                if ce_code:
+                    # Get all products from the CE Code lines
+                    product_ids = ce_code.x_client_product_ce_co_line_ids.mapped(
+                        'x_product_id').ids
+                    record.available_product_ids = [(6, 0, product_ids)]
+                else:
+                    record.available_product_ids = [(5, 0, 0)]  # Clear
+            else:
+                record.available_product_ids = [(5, 0, 0)]
+
+    _sql_constraints = [
+        ('unique_user_partner', 'UNIQUE(user_id, x_partner_id)',
+         'This client is already assigned to this user!')
+    ]
