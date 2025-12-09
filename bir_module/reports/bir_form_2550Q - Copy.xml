@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding='utf-8'?>
+<odoo>
+
+	
+	<record id="2550Q_report_action_id" model="ir.actions.report">
+		<field name="name">BIR Form 2550Q</field>
+		<field name="model">account.move</field>
+		<field name="report_type">qweb-pdf</field>
+		<field name="report_name">bir_module.form_2550Q</field>
+		<field name="report_file">bir_module.form_2550Q</field>
+		<field name="binding_model_id" ref="account.model_account_move"/>
+		<field name="binding_type">report</field>
+	</record>
+
+	<template id="form_2550Q">
+		<t t-call='web.basic_layout'>
+
+			<t t-set='company' t-value="request.env['res.company'].search([('id', '=', doc.company_id.id)])"/>
+			<t t-set='payor' t-value="request.env['res.partner'].search([('id', '=', company.partner_id.id)])"/>
+			<t t-set="sum_row" t-value="purchase[1]['Local Goods']+purchase[1]['Foreign Goods']+purchase[1]['Local Services']+purchase[1]['Foreign Services']"/>
+
+					<!--image as background fluid-->
+				<div class="jumbotron jumbotron-fluid" style="background-image: url('/bir_module/static/img/2550Q.jpg');  background-repeat: no-repeat; background-size: 100% 450mm; width:100% 450mm; height:450mm;">
+
+						<!--upper container of information-->
+					<div class="container" style="position: absolute;text-align: left; color: black; top:140px; width:100%">
+
+						<div class="left" style="position: absolute; top:0.01mm; left:131px;font-size:15px">X</div>
+						<div class="left" style="position: absolute; top:15px; left:131px; letter-spacing:15px; width:300px; font-size:19px">12 2021</div>
+						<div class="left" style="position:absolute; top:55px; left:80px; letter-spacing:6px; font-size:19px"><t t-esc="payor.vat"/></div>
+						<div class="left" style="position:absolute;top:100px;left:49px;width:500px"><t t-esc="payor.name"/></div>
+						<div class="right" style="position: absolute; top:99px; left: 800px; letter-spacing: 13px; font-size: 17px"><t t-esc="payor.phone"/></div>
+						<div class="left" style="position: absolute; top:145px; left:49px;width:500px;"><small><t t-esc="payor.street + ', ' + payor.city"/></small></div>
+						<div class="right" style="position: absolute; top:147px; left: 915px; letter-spacing: 9px; font-size: 18px"><t t-esc="payor.zip"/></div>
+					
+					</div>
+														<!--center container of tax output-->
+					<div class="container" style="position:absolute; text-align:left; color:black; top:370px; width:100%;">
+
+					<div class="center" style="position: absolute; top: 10px; left: 492px;"><t t-esc="sales[1]"/></div>
+					<div class="center" style="position: absolute; top: 29px; left: 492px;"><t t-esc="sales[3]"/></div>
+					<div class="center" style="position: absolute; top: 47px; left: 492px;">0</div>
+					<div class="center" style="position: absolute; top: 65px; left: 492px;"><t t-esc="sales[4]"/></div>
+					<div class="center" style="position: absolute; top: 83px; left: 492px;"><t t-esc="sales[5]"/></div>
+					<div class="right" 	style="position: absolute; top: 10px; left: 770px;"><t t-esc="sales[0]"/></div>
+					<div class="right" 	style="position: absolute; top: 30px; left: 770px;"><t t-esc="sales[2]"/></div>
+					<div class="right" 	style="position: absolute; top: 83px; left: 770px;"><t t-esc="sales[6]"/></div>
+
+				</div>
+					<!--lower container of tax output-->
+				<div class="container" style="position:absolute; text-align:left; color:black; top:642px; width:100%;">
+
+					<div class="left" style="position: absolute; top: 10px; left: 492px;"><t t-esc="purchase[0]['Local Goods']"/></div>
+					<div class="left" style="position: absolute; top: 29px; left: 492px;"><t t-esc="purchase[0]['Foreign Goods']"/></div>
+					<div class="left" style="position: absolute; top: 47px; left: 492px;"><t t-esc="purchase[0]['Local Services']"/></div>
+					<div class="left" style="position: absolute; top: 65px; left: 492px;"><t t-esc="purchase[0]['Local Services']"/></div>
+					<div class="left" style="position: absolute; top: 83px; left: 492px;"><t t-esc="purchase[0]['Foreign Services']"/></div>
+					<div class="left" style="position: absolute; top: 101px; left: 492px;">0</div>
+					<div class="left" style="position: absolute; top: 119px; left: 492px;"><t t-esc="purchase[0]['Tax excempt']"/></div>
+
+					<div class="right" 	style="position: absolute; top: 10px; left: 770px;"><t t-esc="purchase[1]['Local Goods']"/></div>
+					<div class="right" 	style="position: absolute; top: 29px; left: 770px;"><t t-esc="purchase[1]['Foreign Goods']"/></div>
+					<div class="right" 	style="position: absolute; top: 47px; left: 770px;"><t t-esc="purchase[1]['Local Services']"/></div>
+					<div class="right" 	style="position: absolute; top: 65px; left: 770px;"><t t-esc="purchase[1]['Foreign Services']"/></div>
+					<div class="right" 	style="position: absolute; top:100px; left: 770px;">0</div>
+					<div class="right" 	style="position: absolute; top:137px; left: 770px;"><t t-esc="sum_row"/></div>
+				</div>	
+			</div>			
+		</t>
+	</template>
+</odoo>

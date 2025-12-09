@@ -1,0 +1,23 @@
+/* month picker */
+input[type="month"]::-webkit-calendar-picker-indicator {
+    background: url(https://mywildalberta.ca/images/GFX-MWA-Parks-Reservations.png) no-repeat;
+}
+
+input[type="month"] {
+    border: 1px solid blue;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    background-color: #f4f3f1;
+}
+
+
+/* input select */
+.select_dropdown {
+    width: 200px;
+    border: 1px solid blue;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    background-color: #f4f3f1;
+}

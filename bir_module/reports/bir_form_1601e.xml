@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding='utf-8'?>
+<odoo>
+
+	<!-- <report ### V13 Deprecated 
+		id="bir_form_2307"
+		string="BIR Form 2307"
+		model="account.move"
+		report_type="qweb-pdf"
+		name="bir_module.form_2307"
+		file="bir_module.form_2307"/> -->
+	<record id="1601e_report_action_id" model="ir.actions.report">
+		<field name="name">BIR Form 1601e</field>
+		<field name="model">account.move</field>
+		<field name="report_type">qweb-pdf</field>
+		<field name="report_name">bir_module.form_1601e</field>
+		<field name="report_file">bir_module.form_1601e</field>
+		<!-- <field name="binding_model_id" ref="account.model_account_move"/> -->
+		<field name="binding_type">report</field>
+	</record>
+
+	<template id="form_1601e">
+		<t t-call='web.basic_layout'>
+			<div class="page">
+				<p style="page-break-before:always;"> </p>
+				<p>-</p>
+
+				<t t-set="company_id" t-value="env['account.move'].x_fetch_company_id()"/>
+				<t t-set='company' t-value="request.env['res.company'].search([('id', '=', company_id)])"/>
+				<t t-set='payor' t-value="request.env['res.partner'].search([('id', '=', company.partner_id.id)])"/>
+
+				<t t-set="data" t-value="env['account.move'].x_1601e_data(month)"/>
+				<!-- <t t-set='vat' t-value="env['account.move'].x_format_vat(payor.vat)"/> -->
+
+				<div class="jumbotron jumbotron-fluid" style="background-image: url('/bir_module/static/img/1601e.jpg');  background-repeat: no-repeat; background-size: 290mm 480mm; width:290mm; height:480mm;position: absolute;">
+					<!--upper container-->
+					<div class="container" style="position: relative;text-align: left; color: black; top:90px; width:100%;">
+
+						<t t-set="period" t-value="env['account.move'].fetch_period_dates(month)"/>
+						<div class="left" style="position: absolute; top:65px; left:195px; letter-spacing:11px; width:300px; font-size:21px"><t t-esc="period[6]"/></div>
+						<div class="left" style="position: absolute; top:65px; left:260px; letter-spacing:15px; width:300px; font-size:21px"><t t-esc="period[5]"/></div>
+
+						<t t-set='vat' t-value="env['account.move'].x_slice_vat(payor.vat)"/>
+						<div class="left" style="position: absolute; top:130px; left:75px; letter-spacing:11px; font-size:23px;width:600px;"><t t-esc="vat[0]"/></div>
+						<div class="left" style="position: absolute; top:130px; left:170px; letter-spacing:11px; font-size:23px;width:600px;"><t t-esc="vat[1]"/></div>
+						<div class="left" style="position: absolute; top:130px; left:275px; letter-spacing:11px; font-size:23px;width:600px;"><t t-esc="vat[2]"/></div>
+						<div class="left" style="position: absolute; top:130px; left:380px; letter-spacing:11px; font-size:23px;width:600px;"><t t-esc="vat[3]"/>0</div>
+
+						<div class="left" style="position: absolute; top:185px; left:75px;"><t t-esc="payor.name"/></div>
+						<div class="left" style="position: absolute; top:230px; left:75px;"><small><t t-esc="payor.contact_address_complete"/></small></div>
+						<div class="right" style="position: absolute; top:230px; left: 976px; letter-spacing: 13px; font-size: 21px" ><t t-esc="payor.zip"/></div>
+							
+					</div>
+
+					<t t-if='len(data) > 0'>
+						<div class="container" style="padding-top:121mm;font-size:15px;padding-left:50px;width:100%; position: absolute;">
+							<t t-foreach='data' t-as='val'>
+								<div class="row" style="padding-bottom:3px;">
+									<div class="left" style="width:460px;"><t t-esc="val[3]"/></div>
+									<div class="left" style="width:100px;"><t t-esc="val[2]"/></div>
+									<div class="left" style="width:200px;"><t t-esc="'{:,}'.format(round(val[1],2))"/></div>
+									<div class="left" style="width:50px;"><t t-esc="val[4]"/></div>
+									<div class="left" style="width:200px;"><t t-esc="'{:,}'.format(round(val[0],2))"/></div>
+								</div>
+							</t>
+						</div>
+					</t>
+				</div>
+			</div>
+		</t>
+	</template>
+
+</odoo>
