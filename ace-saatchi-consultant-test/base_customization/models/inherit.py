@@ -721,7 +721,8 @@ class HrLeave(models.Model):
         # Check if employee_id and holiday_status_id are in vals
         if vals.get('employee_id') and vals.get('holiday_status_id') == 5:
             # Get the employee record
-            employee = self.env['hr.employee'].browse(vals.get('employee_id'))
+            employee = self.env['hr.employee'].sudo().browse(
+                vals.get('employee_id'))
 
             # Check if employment start date is set
             if employee.x_studio_employment_start_date:
