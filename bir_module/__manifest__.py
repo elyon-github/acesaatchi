@@ -34,8 +34,22 @@
     'auto_install': False,
     'assets': {
         'web.assets_backend': [
+            # IMPORTANT: Load jQuery FIRST (before DataTables)
+            'https://code.jquery.com/jquery-3.7.1.min.js',
+
+            # Then load DataTables CSS
+            'https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css',
+            'https://cdn.datatables.net/responsive/2.3.0/css/responsive.bootstrap.min.css',
+
+            # Then load DataTables JS (after jQuery)
+            'https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js',
+
+            # Your CSS
+            'bir_module/static/src/css/style.css',
+
             # Load utility functions first
             'bir_module/static/src/js/bir_utils.js',
+
             # Load all components
             'bir_module/static/src/js/bir_forms.js',
             'bir_module/static/src/js/sawt_report.js',
@@ -43,13 +57,9 @@
             'bir_module/static/src/js/sls_report.js',
             'bir_module/static/src/js/slp_report.js',
             'bir_module/static/src/js/print_history.js',
+
             # Load templates
             'bir_module/static/src/xml/bir_forms_templates.xml',
-            # CSS files
-            'bir_module/static/src/css/style.css',
-            'https://cdn.datatables.net/1.12.0/css/jquery.dataTables.min.css',
-            'https://cdn.datatables.net/1.12.0/js/jquery.dataTables.min.js',
-            'https://cdn.datatables.net/responsive/2.3.0/css/responsive.bootstrap.min.css',
         ],
         'web.assets_qweb': [
             "bir_module/static/src/xml/reports_body.xml",
