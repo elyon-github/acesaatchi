@@ -153,3 +153,6 @@ class UserClientAssignment(models.Model):
         ('unique_user_partner', 'UNIQUE(user_id, x_partner_id)',
          'This client is already assigned to this user!')
     ]
+
+
+# Attention, Pasok, dulo total in php
