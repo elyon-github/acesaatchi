@@ -293,6 +293,16 @@
   </record>
 
 
+    <record id="view_hr_leave_type_form_employer_threshold" model="ir.ui.view">
+        <field name="name">HR Leave Type Form - Employer Approver Threshold</field>
+        <field name="model">hr.leave.type</field>
+        <field name="inherit_id" ref="hr_holidays.edit_holiday_status_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='leave_validation_type']" position="after">
+                <field name="employer_approver_only_on_days" invisible="leave_validation_type not in ['both']"/>
+            </xpath>
+        </field>
+    </record>
 
 
     <menuitem

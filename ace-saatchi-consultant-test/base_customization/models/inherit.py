@@ -712,66 +712,121 @@ class PurchaseOrder(models.Model):
 
         return approvers
 
+class HrLeaveType(models.Model):
+    _inherit = 'hr.leave.type'
+
+    employer_approver_only_on_days = fields.Integer(
+        string="Manager-Only Approval Threshold (Days)",
+        help="If leave days are less than or equal to this value, only manager approval is required (HR approval is skipped)."
+    )
 
 class HrLeave(models.Model):
     _inherit = 'hr.leave'
+    
 
-    @api.model
-    def create(self, vals):
-        # Check if employee_id and holiday_status_id are in vals
-        if vals.get('employee_id') and vals.get('holiday_status_id') == 5:
-            # Get the employee record
-            employee = self.env['hr.employee'].sudo().browse(
-                vals.get('employee_id'))
+    
+    # @api.model
+    # def create(self, vals):
 
-            # Check if employment start date is set
-            if employee.x_studio_employment_start_date:
-                # Get the request date from vals
-                request_date = fields.Date.from_string(
-                    vals.get('request_date_from'))
-                employment_start = employee.x_studio_employment_start_date
-                delta = relativedelta(request_date, employment_start)
+    #     raise UserError(self.validation_type)
+    #     # Call the parent create method
+    #     res = super(HrLeave, self).create(vals)
 
-                # Calculate when 6 months will be completed
-                six_months_date = employment_start + relativedelta(months=6)
-                remaining_delta = relativedelta(six_months_date, request_date)
-
-                # If less than 6 months at the time of request, raise error with details
-                if delta.months < 6 and delta.years == 0:
-                    raise UserError(
-                        f'You are still in probationary period.\n\n'
-                        f'Employment Start Date: {employment_start.strftime("%B %d, %Y")}\n'
-                        f'Requested Leave Date: {request_date.strftime("%B %d, %Y")}\n'
-                        f'Time Employed by Request Date: {delta.months} month(s) and {delta.days} day(s)\n'
-                        f'Remaining Time: {remaining_delta.months} month(s) and {remaining_delta.days} day(s)\n'
-                        f'This time off type can be used starting {six_months_date.strftime("%B %d, %Y")}.'
-                    )
-
-        # Call the parent create method
-        res = super(HrLeave, self).create(vals)
-
-        return res
-
-    # TODO: Dynamic Approval in SL Type if self.duration_display > 3 days then the self.validation_type becomes 'both' else 'manager' only.
+    #     return res
+    
+    # TODO: Dynamic Approval in SL Type if self.duration_display > 3 days then the self.validation_type becomes 'both' else 'manager' only. - Done
     # TODO: Change Second Approval in State Color Purple
     # TODO: INV00001 FORMAT OF INVOICES IN FORMS PDF REPORT
+    #  - INV000001 (Billing - Invoice Format)
+    #  - BIL000001 - Vendor Bill
+    #  - JVN000001 - JV
+    #  - SO000001 - CE
+    #  - PON000001 - Purchase Order No.
+    #  - ORN000001 - Official Receipt
+    
+    #TODO: IT Guy Client Training
+    #TODO: Discuss User Name and Password Management:
+    #TODO: Discuss Studio:
+    #TODO: Discuss Approval Studio:
+    #TODO: Discuss Access Rights:
+    #TODO: Discuss Record Rules:
+    #TODO: Discuss Client and Product Assignments:
+    #TODO: Discuss General Settings:
+    #TODO: Discuss Installation of Applications:
+    #TODO
+
     def _get_responsible_for_approval(self):
         self.ensure_one()
         responsible = self.env['res.users']
 
+        leave_type = self.holiday_status_id
+        threshold = leave_type.employer_approver_only_on_days
+        is_short_leave = threshold and self.number_of_days <= threshold
+        is_dual_validation = self.validation_type == 'both'
+
+        # Determine the effective validation type without modifying the record
+        effective_validation_type = self.validation_type
+        
+        # If the leave duration is within the configured short-leave threshold
+        # and the leave type normally requires both manager and HR approval,
+        # downgrade the approval flow to employer/manager-only.
+        if is_dual_validation and is_short_leave and threshold:
+            effective_validation_type = 'manager'
+
+
         # SWAP: HR OFFICER FIRST (confirm state)
-        if self.validation_type == 'hr' or (self.validation_type == 'both' and self.state == 'confirm'):
+        if effective_validation_type == 'hr' or (effective_validation_type == 'both' and self.state == 'confirm'):
             if self.holiday_status_id.responsible_ids:
                 responsible = self.holiday_status_id.responsible_ids
 
         # SWAP: MANAGER SECOND (validate1 state)
-        elif self.validation_type == 'manager' or (self.validation_type == 'both' and self.state == 'validate1'):
+        elif effective_validation_type == 'manager' or (effective_validation_type == 'both' and self.state == 'validate1'):
             if self.employee_id.leave_manager_id:
                 responsible = self.employee_id.leave_manager_id
             elif self.employee_id.parent_id.user_id:
                 responsible = self.employee_id.parent_id.user_id
 
         return responsible
+
+    # Disable Probationary Leave Restriction
+    # @api.model
+    # def create(self, vals):
+    #     # Check if employee_id and holiday_status_id are in vals
+    #     if vals.get('employee_id') and vals.get('holiday_status_id') == 5:
+    #         # Get the employee record
+    #         employee = self.env['hr.employee'].sudo().browse(
+    #             vals.get('employee_id'))
+
+    #         # Check if employment start date is set
+    #         if employee.x_studio_employment_start_date:
+    #             # Get the request date from vals
+    #             request_date = fields.Date.from_string(
+    #                 vals.get('request_date_from'))
+    #             employment_start = employee.x_studio_employment_start_date
+    #             delta = relativedelta(request_date, employment_start)
+
+    #             # Calculate when 6 months will be completed
+    #             six_months_date = employment_start + relativedelta(months=6)
+    #             remaining_delta = relativedelta(six_months_date, request_date)
+
+    #             # If less than 6 months at the time of request, raise error with details
+    #             if delta.months < 6 and delta.years == 0:
+    #                 raise UserError(
+    #                     f'You are still in probationary period.\n\n'
+    #                     f'Employment Start Date: {employment_start.strftime("%B %d, %Y")}\n'
+    #                     f'Requested Leave Date: {request_date.strftime("%B %d, %Y")}\n'
+    #                     f'Time Employed by Request Date: {delta.months} month(s) and {delta.days} day(s)\n'
+    #                     f'Remaining Time: {remaining_delta.months} month(s) and {remaining_delta.days} day(s)\n'
+    #                     f'This time off type can be used starting {six_months_date.strftime("%B %d, %Y")}.'
+    #                 )
+
+    #     # Call the parent create method
+    #     res = super(HrLeave, self).create(vals)
+
+    #     return res
+
+
+    
 
 
 class HrExpenseSheet(models.Model):
