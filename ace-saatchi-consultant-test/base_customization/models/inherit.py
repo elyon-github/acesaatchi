@@ -753,6 +753,7 @@ class HrLeave(models.Model):
 
     # TODO: Dynamic Approval in SL Type if self.duration_display > 3 days then the self.validation_type becomes 'both' else 'manager' only.
     # TODO: Change Second Approval in State Color Purple
+    # TODO: INV00001 FORMAT OF INVOICES IN FORMS PDF REPORT
     def _get_responsible_for_approval(self):
         self.ensure_one()
         responsible = self.env['res.users']
