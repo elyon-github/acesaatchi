@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding='utf-8'?>
+<odoo>
+
+
+	<report
+		id="bir_form_2550M"
+		string="BIR Form 2550M"
+		model="account.move"
+		report_type="qweb-pdf"
+		name="bir_module.form_2550M"
+		file="bir_module.form_2550M"/>
+	
+
+	<template id="form_2550M">
+		<t t-call='web.basic_layout'>
+			<t t-foreach="docs" t-as="doc">
+
+				<!-- <t t-set="sales" t-value="env['account.move'].month_or_quarter(doc.date)"/> -->
+				<t t-set="purchase" t-value="env['account.move'].get_form_purchase_vat(doc.date, '2550M')"/>
+				<t t-set='company' t-value="request.env['res.company'].search([('id', '=', doc.company_id.id)])"/>
+				<t t-set='payor' t-value="request.env['res.partner'].search([('id', '=', company.partner_id.id)])"/>
+				<!-- <t t-set="sum_row" t-value="purchase[1]['Local Goods']+purchase[1]['Foreign Goods']+purchase[1]['Local Services']+purchase[1]['Foreign Services']"/> -->
+					
+
+					<!--image as background fluid-->
+			<div class="jumbotron jumbotron-fluid" style="background-image: url('/bir_module/static/img/2550M.jpg');  background-repeat: no-repeat; background-size: 290mm 480mm; width:290mm; height:480mm;position:absolute;">
+
+						<!--upper container of information-->
+			<div class="container" style="position:absolute;text-align: left; color: black; top:140px; width:290mm;">
+
+				<div class="left" style="position: absolute; top:4px; left:316px; letter-spacing:11px; width:300px; font-size:21px"><t t-esc="doc.date.strftime('%m %Y')"/></div>
+				<div class="left" style="position: absolute; top:65px; left:78px;letter-spacing:9px; font-size:21px;"><t t-esc="payor.vat"/></div>
+				<div class="left" style="position: absolute; top:117px; left:49px;width:500px;"><t t-esc="payor.name"/></div>
+				<div class="left" style="position: absolute; top:168px; left:49px;width:500px;"><small><t t-esc="payor.street + ', ' + payor.city"/></small></div>
+				<div class="right" style="position: absolute; top:167px; left: 992px; letter-spacing: 9px; font-size: 20px"><t t-esc="payor.zip"/></div>
+					
+			</div>
+						<!--center container of tax computation-->
+			<div class="container" style="position:absolute; text-align:left; color:black; top:405px; width:290mm;">
+
+					<div class="center" style="position: absolute; top: 9px; left: 570px;"><t t-esc="'{:,}'.format(sales[1])"/></div>
+					<div class="center" style="position: absolute; top: 29px; left: 570px;"><t t-esc="'{:,}'.format(sales[3])"/></div>
+					<div class="center" style="position: absolute; top: 49px; left: 570px;">14A</div>
+					<div class="center" style="position: absolute; top: 68px; left: 570px;"><t t-esc="'{:,}'.format(sales[4])"/></div>
+					<div class="center" style="position: absolute; top: 90px; left: 570px;"><t t-esc="'{:,}'.format(sales[5])"/></div>
+
+					<div class="right" 	style="position: absolute; top: 9px; left: 850px;"><t t-esc="'{:,}'.format(sales[0])"/></div>
+					<div class="right" 	style="position: absolute; top: 29px; left: 850px;"><t t-esc="'{:,}'.format(sales[2])"/></div>
+					<div class="right" 	style="position: absolute; top: 90px; left: 850px;"><t t-esc="'{:,}'.format(sales[6])"/></div>
+			</div>
+						<!--lower container of tax computation-->
+			<div class="container" style="position:absolute;color:black; top:707px; width:290mm;">
+
+					<div class="left" style="position: absolute; top: 10px; left: 570px;"><t t-esc="'{:,}'.format(purchase[0]['Local Goods'])"/></div>
+					<div class="left" style="position: absolute; top: 29px; left: 570px;"><t t-esc="'{:,}'.format(purchase[0]['Foreign Goods'])"/></div>
+					<div class="left" style="position: absolute; top: 50px; left: 570px;"><t t-esc="'{:,}'.format(purchase[0]['Local Services'])"/></div>
+					<div class="left" style="position: absolute; top: 70px; left: 570px;"><t t-esc="'{:,}'.format(purchase[0]['Local Services'])"/></div>
+					<div class="left" style="position: absolute; top: 90px; left: 570px;"><t t-esc="'{:,}'.format(purchase[0]['Foreign Services'])"/></div>
+					<div class="left;text-right" style="position: absolute; top: 110px; left: 570px;">0000000</div>
+					<div class="left" style="position: absolute; top: 131px; left: 570px"><t t-esc="'{:,}'.format(purchase[0]['Tax excempt'])"/></div>
+
+					<div class="right" 	style="position: absolute; top: 10px; left: 850px;"><t t-esc="'{:,}'.format(purchase[1]['Local Goods'])"/></div>
+					<div class="right" 	style="position: absolute; top: 29px; left: 850px;"><t t-esc="'{:,}'.format(purchase[1]['Foreign Goods'])"/></div>
+					<div class="right" 	style="position: absolute; top: 50px; left: 850px;"><t t-esc="'{:,}'.format(purchase[1]['Local Services'])"/></div>
+					<div class="right" 	style="position: absolute; top: 70px; left: 850px;"><t t-esc="'{:,}'.format(purchase[1]['Foreign Services'])"/></div>
+					<div class="right" 	style="position: absolute; top:110px; left: 850px;">0</div>
+					<div class="right" 	style="position: absolute; top:149px; left: 850px;"><t t-esc="'{:,}'.format(sum_row)"/></div>
+				</div>
+
+							<!--<t t-esc="sales"/>-->
+							<!--<t t-esc="purchase"/>-->
+					
+					
+					<p style="page-break-before:always;"></p>		
+			</div>		
+			</t>
+		</t>
+
+	</template>
+</odoo>

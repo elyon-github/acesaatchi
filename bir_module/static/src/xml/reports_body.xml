@@ -1,0 +1,286 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="bir_module.form_2307_page" owl="1">
+        <div class="col-md-12" t-ref="root">
+            <h2 style="color:#8f8f8f; padding-top:10px">BIR Form 2307</h2>
+            <div class="row">
+                <div class="col-md-2">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <input type="button" 
+                                   id="print_2307" 
+                                   value="Print" 
+                                   class="btn btn-success"
+                                   t-on-click="onPrint2307"/>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <input type="month" 
+                           id="_2307_month" 
+                           class="_2307_month"
+                           t-att-value="state.currentMonth"
+                           t-on-keypress="onMonthKeypress"/>
+                </div>
+                <div class="col-md-1 form-group">
+                    <select class="form-control select_dropdown" 
+                            id="_2307_partner"
+                            t-on-change="onPartnerChange">
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-sm-5">
+                    <div id="2307_ammend_table"/>
+                </div>
+                <div class="col-md-7">
+                    <iframe id="2307_preview" style="height:700px" width="100%"></iframe>
+                </div>
+            </div>
+        </div>
+    </t>
+
+    <t t-name="bir_module.form_2550M_page" owl="1">
+        <div class="col-md-12" t-ref="root">
+            <h2 style="color:#8f8f8f; padding-top:10px">BIR Form 2550M</h2>
+            <div class="row">
+                <div class="col-md-2">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <input type="button" 
+                                   id="print_2550M" 
+                                   value="Print" 
+                                   class="btn btn-success"
+                                   t-on-click="onPrint2550M"/>
+                        </div>
+                        <div class="col-md-6">
+                            <input type="button" 
+                                   id="apply_2550M_exclude" 
+                                   value="Preview&#10;Excluded" 
+                                   class="btn btn-danger"
+                                   t-on-click="onApply2550MExclude"/>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <input type="month" 
+                           id="_2550M_month" 
+                           class="_2307_month"
+                           t-att-value="state.currentMonth"
+                           t-on-keypress="onMonthKeypress"/>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-sm-5">
+                    <div id="2550M_ammend_table"/>
+                </div>
+                <div class="col-md-7">
+                    <iframe id="2550M_preview" style="height:700px" width="100%"></iframe>
+                </div>
+            </div>
+        </div>
+    </t>
+
+    <t t-name="bir_module.form_2550Q_page" owl="1">
+        <div class="col-md-12" t-ref="root">
+            <h2 style="color:#8f8f8f; padding-top:10px">BIR Form 2550Q</h2>
+            <div class="row">
+                <div class="col-md-2">
+                    <input type="button" 
+                           id="print_2550Q" 
+                           value="Print" 
+                           class="btn btn-success"
+                           t-on-click="onPrint2550Q"/>
+                </div>
+                <div class="col-md-2">
+                    <input type="month" 
+                           id="_2550Q_month" 
+                           class="_2307_month"
+                           t-att-value="state.currentMonth"
+                           t-on-keypress="onMonthKeypress"/>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-sm-5">
+                    <div id="2550Q_ammend_table"/>
+                </div>
+                <div class="col-md-7">
+                    <iframe id="2550Q_preview" style="height:700px" width="100%"></iframe>
+                </div>
+            </div>
+        </div>
+    </t>
+
+    <t t-name="bir_module.form_1601e_page" owl="1">
+        <div class="col-md-12" t-ref="root">
+            <h2 style="color:#8f8f8f; padding-top:10px">BIR Form 1601E</h2>
+            <div class="row">
+                <div class="col-md-2">
+                    <input type="button" 
+                           id="print_1601e" 
+                           value="Print" 
+                           class="btn btn-success"
+                           t-on-click="onPrint1601e"/>
+                </div>
+                <div class="col-md-2">
+                    <input type="month" 
+                           id="_1601e_month" 
+                           class="_2307_month"
+                           t-att-value="state.currentMonth"
+                           t-on-keypress="onMonthKeypress"/>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-sm-1"></div>
+                <div class="col-md-10">
+                    <iframe id="1601e_preview" style="height:700px" width="100%"></iframe>
+                </div>
+            </div>
+        </div>
+    </t>
+
+    <t t-name="bir_module.sls_report" owl="1">
+        <div class="col-md-12" t-ref="root">
+            <h2 style="color:#8f8f8f; padding-top:10px">Summary List of Sales</h2>
+            <div class="row">
+                <div class="col-md-2">
+                    <input type="button" 
+                           id="export_sls" 
+                           value="Export xlsx" 
+                           class="btn btn-success"
+                           t-on-click="onExportSls"/>
+                </div>
+                <div class="col-md-2">
+                    <input type="month" 
+                           id="sls_param" 
+                           class="sls_param"
+                           t-att-value="state.currentMonth"
+                           t-on-keypress="onSlsParamKeypress"/>
+                </div>
+            </div>
+            <div id="sls_table" class="sls_table"></div>
+        </div>
+    </t>
+
+    <t t-name="bir_module.slp_report" owl="1">
+        <div class="col-md-12" t-ref="root">
+            <h2 style="color:#8f8f8f; padding-top:10px">Summary List of Purchases</h2>
+            <div class="row">
+                <div class="col-md-2">
+                    <input type="button" 
+                           id="export_slp" 
+                           value="Export xlsx" 
+                           class="btn btn-success"
+                           t-on-click="onExportSlp"/>
+                </div>
+                <div class="col-md-2">
+                    <input type="month" 
+                           id="slp_param" 
+                           class="slp_param"
+                           t-att-value="state.currentMonth"
+                           t-on-keypress="onSlpParamKeypress"/>
+                </div>
+            </div>
+            <div id="slp_table" class="slp_table"></div>
+        </div>
+    </t>
+
+    <t t-name="bir_module.sawt_report" owl="1">
+        <div class="col-md-12" t-ref="root">
+            <h2 style="color:#8f8f8f; padding-top:10px">Summary Alphalist of Withholding Tax</h2>
+            <div class="row">
+                <div class="col-md-2">
+                    <input type="button" 
+                           id="export_sawt" 
+                           value="Export xlsx" 
+                           class="btn btn-success"
+                           t-on-click="onExportSawt"/>
+                    <input type="button" 
+                           id="export_sawt_csv" 
+                           value="Export csv" 
+                           class="btn btn-success"
+                           t-on-click="onExportSawtCsv"/>
+                </div>
+                <div class="col-md-2">
+                    <input type="month" 
+                           id="sawt_param" 
+                           class="sawt_param monthpicker"
+                           t-att-value="state.currentMonth"
+                           t-on-keypress="onSawtParamKeypress"/>
+                </div>
+            </div>
+            <div id="sawt_table" class="sawt_table"></div>
+        </div>
+    </t>
+
+    <t t-name="bir_module.print_history" owl="1">
+        <div class="col-md-12" t-ref="root">
+            <h2 style="color:#8f8f8f; padding-top:10px">BIR Report Print History</h2>
+            <div class="row">
+                <div class="col-md-1 form-group">
+                    <select class="form-control select_dropdown" 
+                            id="_print_type"
+                            t-on-change="onPrintTypeChange">
+                    </select>
+                </div>
+            </div>
+            <div id="print_history" class="print_history"></div>
+        </div>
+
+        <div class="modal fade" id="print_details_modal" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">History Details</h5>
+                    </div>
+                    <div class="modal-body">
+                        <div id="_print_details"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="print_preview_modal" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Preview</h5>
+                    </div>
+                    <div class="modal-body">
+                        <iframe id="print_preview_frame" style="height:700px" width="100%"></iframe>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </t>
+
+    <t t-name="bir_module.map_report" owl="1">
+        <div class="col-md-12" t-ref="root">
+            <h2 style="color:#8f8f8f; padding-top:10px">Monthly Alphalist of Payees</h2>
+            <div class="row">
+                <div class="col-md-2">
+                    <input type="button" 
+                           id="export_map" 
+                           value="Export xlsx" 
+                           class="btn btn-success"
+                           t-on-click="onExportMap"/>
+                    <input type="button" 
+                           id="export_map_csv" 
+                           value="Export csv" 
+                           class="btn btn-success"
+                           t-on-click="onExportMapCsv"/>
+                </div>
+                <div class="col-md-2">
+                    <input type="month" 
+                           id="map_param" 
+                           class="map_param"
+                           t-att-value="state.currentMonth"
+                           t-on-keypress="onMapParamKeypress"/>
+                </div>
+            </div>
+            <div id="map_table" class="map_table"></div>
+        </div>
+    </t>
+
+</templates>

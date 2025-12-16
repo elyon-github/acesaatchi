@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding='utf-8'?>
+<odoo>
+
+	<!-- <report ### V13 Deprecated 
+		id="bir_form_2307"
+		string="BIR Form 2307"
+		model="account.move"
+		report_type="qweb-pdf"
+		name="bir_module.form_2307"
+		file="bir_module.form_2307"/> -->
+	<record id="2307_report_action_id" model="ir.actions.report">
+		<field name="name">BIR Form 2307</field>
+		<field name="model">account.move</field>
+		<field name="report_type">qweb-pdf</field>
+		<field name="report_name">bir_module.form_2307_transactional</field>
+		<field name="report_file">bir_module.form_2307_transactional</field>
+		<field name="binding_model_id" ref="account.model_account_move"/>
+		<field name="binding_type">report</field>
+	</record>
+
+	<template id="form_2307_transactional">
+		<t t-call='web.basic_layout'>
+
+			<t t-set="values"/>
+			<t t-set="payor"/>
+
+			<t t-foreach="docs" t-as="doc">
+				<div class="page">
+					<p style="page-break-before:always;"> </p>
+					<!-- <p>-</p> -->
+
+					<t t-set='company' t-value="request.env['res.company'].search([('id', '=', doc.company_id.id)])"/>
+					<t t-set='payor' t-value="request.env['res.partner'].search([('id', '=', company.partner_id.id)])"/>
+					<t t-set='payee' t-value="request.env['res.partner'].search([('id', '=', doc.partner_id.id)])"/>
+					<t t-set="values" t-value="env['account.move'].x_get_2307_data([[doc.id,doc.invoice_date],'transactional', 'print', '2307-Transactional', tranid])"/>
+
+					<div class="jumbotron jumbotron-fluid" style="background-image: url('/bir_module/static/img/2307.jpg');  background-repeat: no-repeat; background-size: 290mm 480mm; width:290mm; height:480mm;position: absolute;">
+						<!--upper container-->
+						<!-- HEADER INFORMATION -->
+						<div class="container" style="position: relative;text-align: left; color: black; top:90px; width:100%;">
+							<t t-set="cov" t-value="env['account.move'].fetch_month_coverage(doc.invoice_date)"/>
+							<div class="left" style="position: absolute; top:80px; left:265px;letter-spacing:8px; font-size:21px; width:300px;"><t t-esc="cov['month']+' 01 '+cov['year']"/></div>
+							<div class="right" style="position: absolute; top:80px; left:725px;letter-spacing:8px; font-size:21px; width:300px;"><t t-esc="cov['month']+' '+cov['date']+' '+cov['year']"/></div>
+							
+							<!-- ================================== PAYEE ===================================== -->
+							<!-- <div class="left" style="position: absolute; top:143px; left:370px; letter-spacing:12px; font-size:23px;width:600px;"><t t-esc="payee.vat"/>-000</div> -->
+							<t t-set="payee_vat" t-value="env['account.move'].x_slice_vat(payee.vat)"/>
+							<div class="left" style="position: absolute; top:143px; left:370px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payee_vat[0]"/></div>
+							<div class="left" style="position: absolute; top:143px; left:465px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payee_vat[1]"/></div>
+							<div class="left" style="position: absolute; top:143px; left:560px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payee_vat[2]"/></div>
+							<div class="left" style="position: absolute; top:143px; left:658px; letter-spacing:14px; font-size:23px;width:200px;"><t t-esc="payee_vat[3]"/></div>
+
+							<div class="left" style="position: absolute;top:205px;left:55px;"><t t-esc="payee.name"/></div>
+							<div class="left" style="position: absolute; top:260px; left:55px;"><small><t t-esc="payee.contact_address_complete"/></small></div>
+							<div class="right" style="position: absolute; top:257px; left: 988px; letter-spacing: 5px; font-size: 21px" ><t t-esc="payee.zip"/></div>
+
+							<!-- ======================================== PAYOR ==================================== -->
+							<!-- <div class="left" style="position: absolute; top:385px; left:370px; letter-spacing:12px; font-size:23px;width:600px;"><t t-esc="payor.vat"/>-000</div> -->
+							<t t-set="payor_vat" t-value="env['account.move'].x_slice_vat(payor.vat)"/>
+							<div class="left" style="position: absolute; top:385px; left:370px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payor_vat[0]"/></div>
+							<div class="left" style="position: absolute; top:385px; left:465px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payor_vat[1]"/></div>
+							<div class="left" style="position: absolute; top:385px; left:560px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payor_vat[2]"/></div>
+							<div class="left" style="position: absolute; top:385px; left:658px; letter-spacing:14px; font-size:23px;width:200px;"><t t-esc="payor_vat[3]"/></div>
+
+							<div class="left" style="position: absolute; top:445px; left:55px;"><t t-esc="payor.name"/></div>
+							<div class="left" style="position: absolute; top:500px; left:55px;"><small><t t-esc="payor.contact_address_complete"/></small></div>
+							<div class="right" style="position: absolute; top:497px; left: 988px; letter-spacing: 5px; font-size: 21px" ><t t-esc="payor.zip"/></div>
+								
+						</div>
+
+						<!-- FORM ITEM LINES -->
+						<t t-if="len(values[0]) > 0">
+							<t t-set="processed" t-value="env['account.move'].process_2307_transactional([values[0], doc.invoice_date])"/>
+							<div class="container" style="padding-top:188.5mm;font-size:15px;padding-left:50px;width:100%; position: absolute;">
+								<t t-foreach="processed" t-as="val">
+									<!-- <t t-set="quarter" t-value="env['account.move'].get_bir_month_num(val[6])"/> -->
+									<div class="row">
+										<div style="width:270px;text-align:center;padding-top:6.5px;"><t t-esc='val["desc"]'/></div>
+
+										<div style="width:21mm;text-align:center;padding-top:6.5px;"><t t-esc='val["code"]'/></div>
+
+										<div style="width:35.5mm;text-align:center;padding-top:6.5px;"><t t-esc='"{:,}".format(round(val["m1"],2))'/></div>
+										<div style="width:36mm;text-align:center;padding-top:6.5px;"><t t-esc='"{:,}".format(round(val["m2"],2))'/></div>
+										<div style="width:35.5mm;text-align:center;padding-top:6.5px;"><t t-esc='"{:,}".format(round(val["m3"],2))'/></div>
+										<div style="width:35.5mm;text-align:center;padding-top:6.5px;"><t t-esc='"{:,}".format(round(val["m_total"],2))'/></div>
+
+										<div style="width:45mm;text-align:center;padding-top:6.5px;"><t t-esc='"{:,}".format(round(val["taxed"],2))'/></div>
+
+									</div>
+									<!-- <div style="width:45mm;text-align:center;padding-top:6.5px;"><t t-esc='processed'/></div> -->
+								</t>
+							</div>
+						</t>
+					</div>
+				</div>
+			</t>
+		</t>
+	</template>
+
+</odoo>

@@ -1,0 +1,127 @@
+<odoo>
+    <!-- explicit list view definition -->
+
+    <!-- <record model="ir.ui.view" id="bir_module.landed_cost_vendors_view">
+      <field name="name">Landed Cost items</field>
+      <field name="model">bir_module.landed_cost_vendors</field>
+      <field name="arch" type="xml">
+        <list>
+          <field name="description"/>
+          <field name="product_id"/>
+          <field name="partner_id"/>
+        </list>
+      </field>
+    </record> -->
+
+    <record model="ir.ui.view" id="bir_module.atc_setup_view">
+      <field name="name">ATC setup list</field>
+      <field name="model">bir_module.atc_setup</field>
+      <field name="arch" type="xml">
+        <list>
+          <field name="name"/>
+          <field name="tax_id"/>
+          <field name="scope"/>
+        </list>
+      </field>
+    </record>
+
+    <!-- actions opening views on models -->
+    <record id="bir_module.atc_setup_action" model="ir.actions.act_window">
+      <field name="name">ATC Setup</field>
+      <field name="res_model">bir_module.atc_setup</field>
+      <field name="view_mode">list,form</field>
+    </record>
+
+    <!-- <record id="bir_module.landed_cost_vendor_action" model="ir.actions.act_window">
+      <field name="name">Landed Cost</field>
+      <field name="res_model">bir_module.landed_cost_vendors</field>
+      <field name="view_mode">list,form</field>
+    </record> -->
+
+    <record id="bir_module.action_sawt_report" model="ir.actions.client">
+      <field name="name">SAWT Report</field>
+      <field name="tag">sawt_report_page</field>
+        <field name="target">main</field>
+    </record>
+
+    <record id="bir_module.action_map_report" model="ir.actions.client">
+      <field name="name">MAP Report</field>
+      <field name="tag">map_report_page</field>
+        <field name="target">main</field>
+    </record>
+
+    <record id="bir_module.action_2307_page" model="ir.actions.client">
+      <field name="name">BIR Form 2307</field>
+      <field name="tag">form_2307_page</field>
+        <field name="target">main</field>
+    </record>
+
+    <record id="bir_module.action_2550M_page" model="ir.actions.client">
+      <field name="name">BIR Form 2550M</field>
+      <field name="tag">form_2550M_page</field>
+        <field name="target">main</field>
+    </record>
+
+    <record id="bir_module.action_2550Q_page" model="ir.actions.client">
+      <field name="name">BIR Form 2550Q</field>
+      <field name="tag">form_2550Q_page</field>
+        <field name="target">main</field>
+    </record>
+
+    <record id="bir_module.action_1601e_page" model="ir.actions.client">
+      <field name="name">BIR Form 1601E</field>
+      <field name="tag">form_1601e_page</field>
+        <field name="target">main</field>
+    </record>
+
+    <record id="bir_module.action_sls_report" model="ir.actions.client">
+      <field name="name">MAP Report</field>
+      <field name="tag">sls_report_page</field>
+        <field name="target">main</field>
+    </record>
+
+    <record id="bir_module.action_slp_report" model="ir.actions.client">
+      <field name="name">MAP Report</field>
+      <field name="tag">slp_report_page</field>
+        <field name="target">main</field>
+    </record>
+
+    <record id="bir_module.action_print_history" model="ir.actions.client">
+      <field name="name">Print History</field>
+      <field name="tag">print_history_page</field>
+        <field name="target">main</field>
+    </record>
+
+    <!-- Top menu item -->
+    <menuitem name="BIR" id="bir_module.menu_root" web_icon="bir_module,static/src/img/icon.png"/>
+    
+    <!-- menu categories -->
+    <menuitem name="Forms" id="bir_module.menu_1" parent="bir_module.menu_root" sequence='1'/>
+    <menuitem name="Reports" id="bir_module.reports" parent="bir_module.menu_root" sequence='2'/>
+    <menuitem name="Print History" id="bir_module.history" parent="bir_module.menu_root" action="bir_module.action_print_history" sequence='3'/>
+    <menuitem name="Configuration" id="bir_module.config" parent="bir_module.menu_root" sequence='4'/>
+
+    <menuitem name="2307" id="bir_module.2307" parent="bir_module.menu_1" action="bir_module.action_2307_page" sequence='1'/>
+    <menuitem name="2550M" id="bir_module.2550M" parent="bir_module.menu_1" action="bir_module.action_2550M_page" sequence='2'/>
+    <menuitem name="2550Q" id="bir_module.2550Q" parent="bir_module.menu_1" action="bir_module.action_2550Q_page" sequence='3'/>
+    <menuitem name="1601E" id="bir_module.1601e" parent="bir_module.menu_1" action="bir_module.action_1601e_page" sequence='4'/>
+
+    <menuitem name="SAWT" id="bir_module.report1" parent="bir_module.reports" action="bir_module.action_sawt_report"/>
+    <menuitem name="MAP" id="bir_module.report2" parent="bir_module.reports" action="bir_module.action_map_report"/>
+    <menuitem name="SLS" id="bir_module.sls" parent="bir_module.reports" action="bir_module.action_sls_report"/>
+    <menuitem name="SLP" id="bir_module.slp" parent="bir_module.reports" action="bir_module.action_slp_report"/>
+
+    <menuitem name="ATC Setup" id="bir_module.atc_setup" parent="bir_module.config" action="bir_module.atc_setup_action"/>
+    <!-- <menuitem name="Landed cost Vendors Setup" id="bir_module.landed_cost_vendor" parent="bir_module.config" action="bir_module.landed_cost_vendor_action"/> -->
+
+    <!-- <template id="assets_backend" inherit_id="web.assets_backend"> ### V14 Deprecated
+        <xpath expr="." position="inside">
+            <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/webrtc-adapter/3.3.3/adapter.min.js"></script>
+            <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.1.10/vue.min.js"></script>
+            <script type="text/javascript" src="https://rawgit.com/schmich/instascan-builds/master/instascan.min.js"></script>
+            <script type="module" src="/bir_module/static/src/js/sawt_report.js"></script>
+            <script type="module" src="/bir_module/static/src/js/map_report.js"></script>
+            <script type="module" src="/bir_module/static/src/js/collective.js"></script>
+        </xpath>
+    </template> -->
+</odoo>
