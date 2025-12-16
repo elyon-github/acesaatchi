@@ -656,7 +656,7 @@ class SaatchiAccruedRevenueWizardLine(models.TransientModel):
         readonly=True,
         help="This sale order already has an accrual for this period",
         compute="_compute_existing_accrual_total",
-        store=True
+        # store=True
     )
     
     existing_accrual_ids = fields.Many2many(
