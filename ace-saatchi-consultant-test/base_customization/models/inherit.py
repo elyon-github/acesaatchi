@@ -712,6 +712,7 @@ class PurchaseOrder(models.Model):
 
         return approvers
 
+
 class HrLeaveType(models.Model):
     _inherit = 'hr.leave.type'
 
@@ -720,11 +721,10 @@ class HrLeaveType(models.Model):
         help="If leave days are less than or equal to this value, only manager approval is required (HR approval is skipped)."
     )
 
+
 class HrLeave(models.Model):
     _inherit = 'hr.leave'
-    
 
-    
     # @api.model
     # def create(self, vals):
 
@@ -733,7 +733,7 @@ class HrLeave(models.Model):
     #     res = super(HrLeave, self).create(vals)
 
     #     return res
-    
+
     # TODO: Dynamic Approval in SL Type if self.duration_display > 3 days then the self.validation_type becomes 'both' else 'manager' only. - Done
     # TODO: Change Second Approval in State Color Purple
     # TODO: INV00001 FORMAT OF INVOICES IN FORMS PDF REPORT
@@ -743,17 +743,16 @@ class HrLeave(models.Model):
     #  - SO000001 - CE
     #  - PON000001 - Purchase Order No.
     #  - ORN000001 - Official Receipt
-    
-    #TODO: IT Guy Client Training
-    #TODO: Discuss User Name and Password Management:
-    #TODO: Discuss Studio:
-    #TODO: Discuss Approval Studio:
-    #TODO: Discuss Access Rights:
-    #TODO: Discuss Record Rules:
-    #TODO: Discuss Client and Product Assignments:
-    #TODO: Discuss General Settings:
-    #TODO: Discuss Installation of Applications:
-    #TODO
+
+    # IT Team Client Training
+    # Discuss General Settings:
+    # XLSX Export  / Import Feature
+    # Discuss Studio:
+    # Discuss Approval Studio:
+    # Discuss Access Rights:
+    # Discuss Record Rules:
+    # Discuss Client and Product Assignments:
+    # Discuss Installation of Applications:
 
     def _get_responsible_for_approval(self):
         self.ensure_one()
@@ -766,13 +765,12 @@ class HrLeave(models.Model):
 
         # Determine the effective validation type without modifying the record
         effective_validation_type = self.validation_type
-        
+
         # If the leave duration is within the configured short-leave threshold
         # and the leave type normally requires both manager and HR approval,
         # downgrade the approval flow to employer/manager-only.
         if is_dual_validation and is_short_leave and threshold:
             effective_validation_type = 'manager'
-
 
         # SWAP: HR OFFICER FIRST (confirm state)
         if effective_validation_type == 'hr' or (effective_validation_type == 'both' and self.state == 'confirm'):
@@ -824,9 +822,6 @@ class HrLeave(models.Model):
     #     res = super(HrLeave, self).create(vals)
 
     #     return res
-
-
-    
 
 
 class HrExpenseSheet(models.Model):
