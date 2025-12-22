@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    
+    <!-- Wizard Form View -->
+    <record id="view_sales_order_revenue_wizard_form" model="ir.ui.view">
+        <field name="name">sales.order.revenue_report.wizard.form</field>
+        <field name="model">sales.order.revenue_report.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Generate Sales Order Revenue Report">
+                
+                <group>
+                    <group>
+                        <field name="partner_ids" widget="many2many_tags" 
+                               options="{'no_create': True, 'no_open': True}"
+                               placeholder="Leave empty to include all customers"/>
+                    </group>
+                    <group>
+                        <field name="report_date"/>
+                    </group>
+                </group>
+                
+                <div class="alert alert-info" role="alert">
+                    <strong>Note:</strong> The report will use the selected month from the date field. 
+                    The day will be ignored. Leave customers empty to include all customers.
+                </div>
+                
+                <footer>
+                    <button string="Generate Report" 
+                            name="action_print_report" 
+                            type="object" 
+                            class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+                
+            </form>
+        </field>
+    </record>
+
+    <!-- Wizard Action -->
+    <!-- <record id="action_sales_order_revenue_wizard" model="ir.actions.act_window">
+        <field name="name">Generate Sales Order Revenue Report</field>
+        <field name="res_model">sales.order.revenue_report.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="binding_model_id" ref="model_sale_order"/>
+    </record> -->
+
+</odoo>

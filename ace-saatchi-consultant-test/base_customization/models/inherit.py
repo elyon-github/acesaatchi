@@ -61,10 +61,16 @@ class InheritSaleOrder(models.Model):
     @api.depends('partner_id')
     def _compute_x_client_product_ce_code_domain(self):
         for record in self:
-            domain = [
-                ('x_client_product_ce_co_id.x_partner_id', '=', record.partner_id.id),
-                ('x_product_id', 'in', self.env.user.x_product_ids.ids)
-            ]
+            
+            if self.env.user.id != 2:
+                domain = [
+                    ('x_client_product_ce_co_id.x_partner_id', '=', record.partner_id.id),
+                    ('x_product_id', 'in', self.env.user.x_product_ids.ids)
+                ]
+            else:
+                domain = [
+                   ('x_client_product_ce_co_id.x_partner_id', '=', record.partner_id.id),
+                ]
             record.x_client_product_ce_code_domain = str(domain)
 
     x_job_description = fields.Char('Job Description')

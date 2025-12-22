@@ -1,0 +1,753 @@
+from odoo import models
+import datetime
+from xlsxwriter.workbook import Workbook
+from odoo.exceptions import ValidationError, UserError
+from dateutil.relativedelta import relativedelta
+import logging
+from collections import defaultdict
+
+_logger = logging.getLogger(__name__)
+
+
+class SalesOrderRevenueXLSX(models.AbstractModel):
+    _name = 'report.sales_order_revenue_xlsx'
+    _inherit = 'report.report_xlsx.abstract'
+    _description = 'Sales Order Revenue XLSX Report'
+
+    def _get_accrued_revenue_account_id(self):
+        """Get accrued revenue account ID with fallback"""
+        try:
+            account_id = int(self.env['ir.config_parameter'].sudo().get_param(
+                'account.accrued_revenue_account_id',
+                default='0'
+            ) or 0)
+
+            if account_id:
+                account = self.env['account.account'].sudo().browse(account_id)
+                if account.exists() and not account.deprecated:
+                    return account_id
+
+            # Fallback: Find miscellaneous income account
+            misc_account = self.env['account.account'].sudo().search([
+                ('account_type', '=', 'income_other'),
+                ('deprecated', '=', False),
+                ('company_id', '=', self.env.company.id)
+            ], limit=1)
+
+            return misc_account.id if misc_account else 0
+
+        except (ValueError, TypeError):
+            return 0
+
+    def _define_formats(self, workbook):
+        """Define and return format objects."""
+        base_font = {'font_name': 'Calibri', 'font_size': 10}
+
+        # Title formats
+        title_format = workbook.add_format({
+            **base_font,
+            'bold': True,
+            'font_size': 11
+        })
+
+        # Section header format with borders
+        section_header_format = workbook.add_format({
+            **base_font,
+            'bold': True,
+            'align': 'center',
+            'valign': 'vcenter',
+            'border': 2
+        })
+
+        # Section header format without borders (for empty cells)
+        section_header_no_border = workbook.add_format({
+            **base_font,
+            'bold': True,
+            'align': 'center',
+            'valign': 'vcenter'
+        })
+
+        # Column header format with thick borders
+        column_header_format = workbook.add_format({
+            **base_font,
+            'bold': True,
+            'align': 'center',
+            'valign': 'vcenter',
+            'border': 2
+        })
+
+        # Normal cell format with borders
+        normal_format = workbook.add_format({
+            **base_font,
+            'align': 'left',
+            'valign': 'vcenter',
+            'border': 1
+        })
+
+        # Centered cell format with borders
+        centered_format = workbook.add_format({
+            **base_font,
+            'align': 'center',
+            'valign': 'vcenter',
+            'border': 1
+        })
+
+        # Date cell format with borders
+        date_format = workbook.add_format({
+            **base_font,
+            'num_format': 'mm/dd/yyyy',
+            'align': 'center',
+            'valign': 'vcenter',
+            'border': 1
+        })
+
+        # Currency format with borders (with dash for zero)
+        currency_format = workbook.add_format({
+            **base_font,
+            'num_format': '#,##0.00;-#,##0.00;"-"',
+            'align': 'right',
+            'valign': 'vcenter',
+            'border': 1
+        })
+
+        # Currency format with parentheses for negatives with borders (with dash for zero)
+        currency_negative_format = workbook.add_format({
+            **base_font,
+            'num_format': '#,##0.00;(#,##0.00);"-"',
+            'align': 'right',
+            'valign': 'vcenter',
+            'border': 1
+        })
+
+        return {
+            'title': title_format,
+            'section_header': section_header_format,
+            'section_header_no_border': section_header_no_border,
+            'column_header': column_header_format,
+            'normal': normal_format,
+            'centered': centered_format,
+            'date': date_format,
+            'currency': currency_format,
+            'currency_negative': currency_negative_format
+        }
+
+    def _sanitize_sheet_name(self, name):
+        """Sanitize sheet name to comply with Excel rules
+        
+        Excel sheet name rules:
+        - Max 31 characters
+        - Cannot contain: \ / ? * [ ]
+        - Cannot be empty
+        """
+        if not name:
+            return 'UNNAMED'
+        
+        # Remove invalid characters
+        invalid_chars = ['\\', '/', '?', '*', '[', ']']
+        for char in invalid_chars:
+            name = name.replace(char, '')
+        
+        # Truncate to 31 characters
+        if len(name) > 31:
+            name = name[:31]
+        
+        return name if name else 'UNNAMED'
+
+    def _group_lines_by_ce(self, lines, report_month, all_billed_so_ids=None):
+        """Group account.move.line records by partner and CE code
+        
+        Includes:
+        - Lines from accrued revenue entries
+        - ALL sales orders that were billed in the report month (whether they have accrued entries or not)
+        """
+        grouped = defaultdict(lambda: defaultdict(lambda: {
+            'ce_date': None,
+            'description': '',
+            'year': None,
+            'month': None,
+            'ce_status': '',
+            'lines': [],
+            'sales_orders': set()
+        }))
+
+        # Calculate date ranges
+        # Reversal month: current report month
+        reversal_start = report_month.replace(day=1)
+        reversal_end = (reversal_start + relativedelta(months=1)) - relativedelta(days=1)
+
+        # Accrual month: 1 month before report month
+        accrual_month = report_month - relativedelta(months=1)
+        accrual_start = accrual_month.replace(day=1)
+        accrual_end = (accrual_start + relativedelta(months=1)) - relativedelta(days=1)
+
+        # Process accrued revenue lines
+        relevant_lines = []
+        for line in lines:
+            if not line.date:
+                continue
+
+            # Include reversals from current month or accruals from last month
+            if (reversal_start <= line.date <= reversal_end) or (accrual_start <= line.date <= accrual_end):
+                relevant_lines.append(line)
+
+        for line in relevant_lines:
+            partner_name = line.partner_id.name.upper() if line.partner_id and line.partner_id.name else 'UNKNOWN'
+            ce_code = line.x_ce_code.upper() if line.x_ce_code else 'NO_CE'
+
+            # Store line for processing
+            grouped[partner_name][ce_code]['lines'].append(line)
+
+            # Track sales order for billing calculation
+            if line.x_sales_order:
+                grouped[partner_name][ce_code]['sales_orders'].add(line.x_sales_order.id)
+
+            # Capture CE-level fields (use first non-empty value found)
+            if line.x_ce_date and not grouped[partner_name][ce_code]['ce_date']:
+                grouped[partner_name][ce_code]['ce_date'] = line.x_ce_date
+                grouped[partner_name][ce_code]['year'] = line.x_ce_date.year
+                grouped[partner_name][ce_code]['month'] = line.x_ce_date.strftime('%B').upper()
+
+            if line.move_id and line.move_id.x_related_custom_accrued_record and not grouped[partner_name][ce_code]['description']:
+                desc = line.move_id.x_related_custom_accrued_record.ce_job_description or ''
+                grouped[partner_name][ce_code]['description'] = desc.upper()
+
+            if line.x_ce_status and not grouped[partner_name][ce_code]['ce_status']:
+                selection_dict = dict(line._fields['x_ce_status'].selection)
+                ce_status = selection_dict.get(line.x_ce_status, '')
+                grouped[partner_name][ce_code]['ce_status'] = ce_status.upper() if ce_status else ''
+
+        # Process ALL billed sales orders (including those already in grouped data)
+        if all_billed_so_ids:
+            all_billed_sos = self.env['sale.order'].browse(all_billed_so_ids)
+            
+            for so in all_billed_sos:
+                partner_name = so.partner_id.name.upper() if so.partner_id and so.partner_id.name else 'UNKNOWN'
+                ce_code = so.x_ce_code.upper() if so.x_ce_code else 'NO_CE'
+                
+                # Add SO to sales_orders set (will merge with existing if already present)
+                grouped[partner_name][ce_code]['sales_orders'].add(so.id)
+                
+                # Populate CE-level fields from SO if not already set
+                if so.date_order and not grouped[partner_name][ce_code]['ce_date']:
+                    grouped[partner_name][ce_code]['ce_date'] = so.date_order
+                    grouped[partner_name][ce_code]['year'] = so.date_order.year
+                    grouped[partner_name][ce_code]['month'] = so.date_order.strftime('%B').upper()
+                
+                # Get description from SO if available and not already set
+                if hasattr(so, 'x_job_description') and so.x_job_description and not grouped[partner_name][ce_code]['description']:
+                    grouped[partner_name][ce_code]['description'] = so.x_job_description.upper()
+                
+                if so.x_ce_status and not grouped[partner_name][ce_code]['ce_status']:
+                    selection_dict = dict(so._fields['x_ce_status'].selection)
+                    ce_status = selection_dict.get(so.x_ce_status, '')
+                    grouped[partner_name][ce_code]['ce_status'] = ce_status.upper() if ce_status else ''
+
+        return grouped
+
+    def _calculate_amounts_by_type(self, lines, report_month):
+        """Calculate amounts for each entry type category
+        
+        Logic:
+        - Reversals: from current report month (e.g., if report_month is July, reversals from July)
+        - Accruals: from 1 month ago (e.g., if report_month is July, accruals from June)
+        """
+        amounts = {
+            'system_accrual': 0,
+            'system_reversal': 0,
+            'manual_accrual': 0,
+            'manual_reversal': 0
+        }
+
+        # Calculate date ranges
+        # Reversal month: current report month
+        reversal_start = report_month.replace(day=1)
+        reversal_end = (reversal_start + relativedelta(months=1)) - relativedelta(days=1)
+
+
+        # Accrual month (same as report month)
+        accrual_start = report_month.replace(day=1)
+        accrual_end = (accrual_start + relativedelta(months=1)) - relativedelta(days=1)
+
+        for line in lines:
+            if not line.date:
+                continue
+
+            # Calculate net amount (debit - credit)
+            net_amount = (line.debit or 0) - (line.credit or 0)
+
+            # Categorize based on type and date range
+            if line.x_type_of_entry == 'reversal_system':
+                # Reversals from current report month
+                if reversal_start <= line.date <= reversal_end:
+                    amounts['system_reversal'] += net_amount
+            elif line.x_type_of_entry == 'accrued_system':
+                # Accruals from 1 month ago
+                if accrual_start <= line.date <= accrual_end:
+                    amounts['system_accrual'] += net_amount
+            elif line.x_type_of_entry == 'reversal_manual':
+                # Manual reversals from current report month
+                if reversal_start <= line.date <= reversal_end:
+                    amounts['manual_reversal'] += net_amount
+            elif line.x_type_of_entry == 'accrued_manual':
+                # Manual accruals from 1 month ago
+                if accrual_start <= line.date <= accrual_end:
+                    amounts['manual_accrual'] += net_amount
+
+        return amounts
+
+    def _calculate_billed_amount(self, sales_order_ids, report_month):
+        """Calculate total billed amount for given sales orders in the report month
+        
+        Args:
+            sales_order_ids: set of sale.order IDs
+            report_month: date object representing the report month
+            
+        Returns:
+            float: Total billed amount (untaxed) for posted invoices in the report month
+        """
+        if not sales_order_ids:
+            return 0.0
+        
+        # Get the start and end of the report month
+        month_start = report_month.replace(day=1)
+        month_end = (month_start + relativedelta(months=1)) - relativedelta(days=1)
+        
+        total_billed = 0.0
+        
+        # Browse sales orders
+        sales_orders = self.env['sale.order'].browse(list(sales_order_ids))
+        
+        for so in sales_orders:
+            # Get all invoices related to this sales order
+            invoices = so.invoice_ids.filtered(
+                lambda inv: inv.state == 'posted' 
+                and inv.move_type == 'out_invoice'
+                and inv.invoice_date 
+                and month_start <= inv.invoice_date <= month_end
+            )
+            
+            # Sum the untaxed amounts (use amount_untaxed instead of amount_total)
+            for invoice in invoices:
+                total_billed += invoice.amount_untaxed
+        
+        return total_billed
+
+    def generate_xlsx_report(self, workbook, data, docids):
+        """
+        Main report generation method.
+        
+        Args:
+            workbook: xlsxwriter workbook object
+            data: dictionary containing report_date, partner_ids, and move_line_ids from wizard
+            docids: not used (we use move_line_ids from data instead)
+        """
+        # Extract report date from wizard data
+        if data and 'report_date' in data:
+            report_date_str = data['report_date']
+            report_month = datetime.datetime.strptime(report_date_str, '%Y-%m-%d').date()
+        else:
+            # Fallback to today if no date provided
+            report_month = datetime.date.today()
+
+        # Get move lines from data
+        if data and 'move_line_ids' in data:
+            move_line_ids = data['move_line_ids']
+            move_lines = self.env['account.move.line'].browse(move_line_ids)
+        else:
+            raise UserError("No move line IDs provided in report data.")
+
+        # Validate move_lines
+        if not move_lines:
+            raise UserError("No accrued revenue entries found for the selected criteria.")
+
+        # Define formats
+        formats = self._define_formats(workbook)
+
+        # Get all billed SO IDs from data
+        all_billed_so_ids = data.get('all_billed_so_ids', []) if data else []
+        
+        # Group lines by partner and CE (includes both accrued and billed)
+        grouped_data = self._group_lines_by_ce(move_lines, report_month, all_billed_so_ids)
+        
+        if not grouped_data:
+            raise UserError("No data found for the report month.")
+
+        # Generate summary sheet first
+        self._generate_summary_sheet(
+            workbook, formats, grouped_data, report_month)
+
+        # Generate individual customer sheets
+        for partner_name in sorted(grouped_data.keys()):
+            self._generate_customer_sheet(
+                workbook, formats, partner_name, grouped_data[partner_name], report_month)
+
+        return True
+
+    def _generate_summary_sheet(self, workbook, formats, grouped_data, report_month):
+        """Generate summary sheet with customer totals (no CE breakdown)"""
+        
+        sheet_name = 'SUMMARY'
+        sheet = workbook.add_worksheet(sheet_name)
+
+        # Format month names
+        month_full = report_month.strftime('%B %Y').upper()
+        report_date = report_month.strftime('%m/%d/%Y')
+
+        # Set column widths
+        sheet.set_column(0, 0, 30)   # CLIENT
+        sheet.set_column(1, 1, 40)   # DESCRIPTION
+        sheet.set_column(2, 2, 8)    # Year
+        sheet.set_column(3, 3, 12)   # Month
+        sheet.set_column(4, 4, 18)   # BILLED
+        sheet.set_column(5, 5, 18)   # System Accrual
+        sheet.set_column(6, 6, 18)   # System Reversal
+        sheet.set_column(7, 7, 18)   # Manual Accrual
+        sheet.set_column(8, 8, 18)   # Manual Reversal
+        sheet.set_column(9, 9, 15)   # Total
+        sheet.set_column(10, 10, 20) # CE Status
+
+        # Write report header
+        row = 0
+        sheet.write(row, 0, 'ACE SAATCHI AND SAATCHI ADVERTISING INC', formats['title'])
+        row += 1
+        sheet.write(row, 0, f'REVENUE REPORT SUMMARY - {month_full}', formats['title'])
+        row += 1
+        sheet.write(row, 0, report_date, formats['title'])
+        row += 2
+
+        # Write column headers
+        headers = [
+            'CLIENT', 'DESCRIPTION', 'Year', 'Month', 'BILLED',
+            'SYSTEM ACCRUAL', 'SYSTEM REVERSAL', 'MANUAL ACCRUAL', 'MANUAL REVERSAL',
+            'TOTAL', 'CE STATUS'
+        ]
+
+        for col, header in enumerate(headers):
+            sheet.write(row, col, header, formats['column_header'])
+
+        sheet.autofilter(row, 0, row, len(headers) - 1)
+        row += 1
+        data_start_row = row
+
+        # Write summary data rows (aggregate by customer)
+        for partner_name in sorted(grouped_data.keys()):
+            ces_data = grouped_data[partner_name]
+            
+            # Aggregate all amounts for this customer
+            total_amounts = {
+                'system_accrual': 0,
+                'system_reversal': 0,
+                'manual_accrual': 0,
+                'manual_reversal': 0
+            }
+            
+            # Collect all descriptions, years, months, statuses, and sales orders
+            descriptions = set()
+            years = set()
+            months = set()
+            statuses = set()
+            all_sales_orders = set()
+            
+            for ce_code, ce_data in ces_data.items():
+                amounts = self._calculate_amounts_by_type(ce_data['lines'], report_month)
+                
+                total_amounts['system_accrual'] += amounts['system_accrual']
+                total_amounts['system_reversal'] += amounts['system_reversal']
+                total_amounts['manual_accrual'] += amounts['manual_accrual']
+                total_amounts['manual_reversal'] += amounts['manual_reversal']
+                
+                if ce_data['description']:
+                    descriptions.add(ce_data['description'])
+                if ce_data['year']:
+                    years.add(str(ce_data['year']))
+                if ce_data['month']:
+                    months.add(ce_data['month'])
+                if ce_data['ce_status']:
+                    statuses.add(ce_data['ce_status'])
+                
+                # Collect all sales orders for this customer
+                all_sales_orders.update(ce_data['sales_orders'])
+            
+            # Calculate billed amount for all sales orders of this customer
+            billed_amount = self._calculate_billed_amount(all_sales_orders, report_month)
+
+            # Write customer row
+            sheet.write(row, 0, partner_name, formats['normal'])
+            
+            # Concatenate multiple descriptions if any
+            desc_str = ', '.join(sorted(descriptions)) if descriptions else ''
+            sheet.write(row, 1, desc_str, formats['normal'])
+            
+            # Concatenate multiple years
+            year_str = ', '.join(sorted(years)) if years else ''
+            sheet.write(row, 2, year_str, formats['centered'])
+            
+            # Concatenate multiple months
+            month_str = report_month.strftime('%B').upper()
+            sheet.write(row, 3, month_str, formats['centered'])
+
+            # Write BILLED amount
+            sheet.write(row, 4, billed_amount, formats['currency_negative'])
+
+            sheet.write(row, 5, total_amounts['system_accrual'], formats['currency_negative'])
+            sheet.write(row, 6, total_amounts['system_reversal'], formats['currency_negative'])
+            sheet.write(row, 7, total_amounts['manual_accrual'], formats['currency_negative'])
+            sheet.write(row, 8, total_amounts['manual_reversal'], formats['currency_negative'])
+
+            # Total formula
+            excel_row = row + 1
+            sheet.write_formula(
+                row, 9, f'=E{excel_row}+F{excel_row}+G{excel_row}+H{excel_row}+I{excel_row}', formats['currency'])
+
+            # Concatenate multiple statuses
+            status_str = ', '.join(sorted(statuses)) if statuses else ''
+            sheet.write(row, 10, status_str, formats['centered'])
+
+            row += 1
+
+        # Add totals row
+        total_row = row
+
+        # Create bold formats for totals
+        base_font = {'font_name': 'Calibri', 'font_size': 10}
+        currency_bold_format = workbook.add_format({
+            **base_font,
+            'bold': True,
+            'num_format': '#,##0.00;-#,##0.00;"-"',
+            'align': 'right',
+            'valign': 'vcenter',
+            'border': 1
+        })
+        currency_negative_bold_format = workbook.add_format({
+            **base_font,
+            'bold': True,
+            'num_format': '#,##0.00;(#,##0.00);"-"',
+            'align': 'right',
+            'valign': 'vcenter',
+            'border': 1
+        })
+        bold_with_border = workbook.add_format({
+            **base_font,
+            'bold': True,
+            'align': 'center',
+            'valign': 'vcenter',
+            'border': 1
+        })
+
+        # Empty cells before TOTAL label
+        for col in range(0, 3):
+            sheet.write(total_row, col, '', formats['section_header_no_border'])
+
+        # TOTAL label
+        sheet.write(total_row, 3, 'TOTAL', bold_with_border)
+
+        # Sum formulas for monetary columns
+        sheet.write_formula(
+            total_row, 4, f'=SUM(E{data_start_row + 1}:E{total_row})', currency_negative_bold_format)
+        sheet.write_formula(
+            total_row, 5, f'=SUM(F{data_start_row + 1}:F{total_row})', currency_negative_bold_format)
+        sheet.write_formula(
+            total_row, 6, f'=SUM(G{data_start_row + 1}:G{total_row})', currency_negative_bold_format)
+        sheet.write_formula(
+            total_row, 7, f'=SUM(H{data_start_row + 1}:H{total_row})', currency_negative_bold_format)
+        sheet.write_formula(
+            total_row, 8, f'=SUM(I{data_start_row + 1}:I{total_row})', currency_negative_bold_format)
+        sheet.write_formula(
+            total_row, 9, f'=SUM(J{data_start_row + 1}:J{total_row})', currency_bold_format)
+        
+        # Empty CE Status cell
+        sheet.write(total_row, 10, '', formats['section_header_no_border'])
+
+        return True
+
+    def _generate_customer_sheet(self, workbook, formats, partner_name, ces_data, report_month):
+        """Generate individual customer sheet with CE breakdown"""
+        
+        # Sanitize sheet name
+        sheet_name = self._sanitize_sheet_name(partner_name)
+        sheet = workbook.add_worksheet(sheet_name)
+
+        # Format month names
+        month_full = report_month.strftime('%B %Y').upper()
+        report_date = report_month.strftime('%m/%d/%Y')
+        prev_month = (report_month - relativedelta(months=1)).strftime('%B').upper()
+
+        # Set column widths
+        sheet.set_column(0, 0, 15)   # CE#
+        sheet.set_column(1, 1, 12)   # CE DATE
+        sheet.set_column(2, 2, 40)   # DESCRIPTION
+        sheet.set_column(3, 3, 8)    # Year
+        sheet.set_column(4, 4, 12)   # Month
+        sheet.set_column(5, 5, 18)   # BILLED
+        sheet.set_column(6, 6, 18)   # System Accrual
+        sheet.set_column(7, 7, 18)   # System Reversal
+        sheet.set_column(8, 8, 18)   # Manual Accrual
+        sheet.set_column(9, 9, 18)   # Manual Reversal
+        sheet.set_column(10, 10, 15) # Total
+        sheet.set_column(11, 11, 20) # CE Status
+        sheet.set_column(12, 12, 15) # Per CSD
+        sheet.set_column(13, 13, 15) # Variance
+        sheet.set_column(14, 14, 20) # Cost to Client
+        sheet.set_column(15, 15, 20) # For Revenue Adjustment
+        sheet.set_column(16, 16, 30) # Remarks
+
+        # Write report header
+        row = 0
+        sheet.write(row, 0, 'ACE SAATCHI AND SAATCHI ADVERTISING INC', formats['title'])
+        row += 1
+        sheet.write(row, 0, f'REVENUE REPORT - {month_full}', formats['title'])
+        row += 1
+        sheet.write(row, 0, report_date, formats['title'])
+        row += 1
+        sheet.write(row, 0, f'CLIENT: {partner_name}', formats['title'])
+        row += 2
+
+        # Write column headers
+        headers = [
+            'CE#', 'CE DATE', 'DESCRIPTION', 'Year', 'Month', 'BILLED',
+            'SYSTEM ACCRUAL', 'SYSTEM REVERSAL', 'MANUAL ACCRUAL', 'MANUAL REVERSAL',
+            'TOTAL', 'CE STATUS', 'PER CSD', 'VARIANCE',
+            f'COST TO CLIENT - {prev_month}', 'FOR REVENUE ADJUSTMENT', 'REMARKS'
+        ]
+
+        for col, header in enumerate(headers):
+            sheet.write(row, col, header, formats['column_header'])
+
+        sheet.autofilter(row, 0, row, len(headers) - 1)
+        row += 1
+        data_start_row = row
+
+        # Write data rows
+        for ce_code in sorted(ces_data.keys()):
+            ce_data = ces_data[ce_code]
+            amounts = self._calculate_amounts_by_type(ce_data['lines'], report_month)
+            
+            # Calculate billed amount for this CE's sales orders
+            billed_amount = self._calculate_billed_amount(ce_data['sales_orders'], report_month)
+
+            sheet.write(row, 0, ce_code, formats['centered'])
+
+            if ce_data['ce_date']:
+                sheet.write(row, 1, ce_data['ce_date'], formats['date'])
+            else:
+                sheet.write(row, 1, '', formats['centered'])
+
+            sheet.write(row, 2, ce_data['description'], formats['normal'])
+
+            if ce_data['year']:
+                sheet.write(row, 3, ce_data['year'], formats['centered'])
+            else:
+                sheet.write(row, 3, '', formats['centered'])
+
+            if ce_data['month']:
+                sheet.write(row, 4, ce_data['month'], formats['centered'])
+            else:
+                sheet.write(row, 4, '', formats['centered'])
+
+            # Write BILLED amount
+            sheet.write(row, 5, billed_amount, formats['currency_negative'])
+
+            sheet.write(row, 6, amounts['system_accrual'], formats['currency_negative'])
+            sheet.write(row, 7, amounts['system_reversal'], formats['currency_negative'])
+            sheet.write(row, 8, amounts['manual_accrual'], formats['currency_negative'])
+            sheet.write(row, 9, amounts['manual_reversal'], formats['currency_negative'])
+
+            # Total formula (includes BILLED + accruals/reversals: F+G+H+I+J which is columns 5-9)
+            excel_row = row + 1
+            sheet.write_formula(
+                row, 10, f'=F{excel_row}+G{excel_row}+H{excel_row}+I{excel_row}+J{excel_row}', formats['currency'])
+
+            sheet.write(row, 11, ce_data['ce_status'], formats['centered'])
+
+            # PER CSD - empty for user input
+            sheet.write(row, 12, '', formats['currency'])
+
+            # VARIANCE formula: Total - Per CSD (K - M which is 10 - 12)
+            sheet.write_formula(
+                row, 13, f'=K{excel_row}-M{excel_row}', formats['currency'])
+
+            # COST TO CLIENT - empty for user input
+            sheet.write(row, 14, '', formats['currency'])
+
+            # FOR REVENUE ADJUSTMENT formula: Variance - Cost to Client (N - O which is 13 - 14)
+            sheet.write_formula(
+                row, 15, f'=N{excel_row}-O{excel_row}', formats['currency'])
+
+            # REMARKS - empty for user input
+            sheet.write(row, 16, '', formats['normal'])
+
+            row += 1
+
+        # Add totals row
+        total_row = row
+
+        # Create bold formats for totals
+        base_font = {'font_name': 'Calibri', 'font_size': 10}
+        currency_bold_format = workbook.add_format({
+            **base_font,
+            'bold': True,
+            'num_format': '#,##0.00;-#,##0.00;"-"',
+            'align': 'right',
+            'valign': 'vcenter',
+            'border': 1
+        })
+        currency_negative_bold_format = workbook.add_format({
+            **base_font,
+            'bold': True,
+            'num_format': '#,##0.00;(#,##0.00);"-"',
+            'align': 'right',
+            'valign': 'vcenter',
+            'border': 1
+        })
+        bold_with_border = workbook.add_format({
+            **base_font,
+            'bold': True,
+            'align': 'center',
+            'valign': 'vcenter',
+            'border': 1
+        })
+
+        # Empty cells before TOTAL label
+        for col in range(0, 4):
+            sheet.write(total_row, col, '', formats['section_header_no_border'])
+
+        # TOTAL label
+        sheet.write(total_row, 4, 'TOTAL', bold_with_border)
+
+        # Sum formulas for monetary columns
+        sheet.write_formula(
+            total_row, 5, f'=SUM(F{data_start_row + 1}:F{total_row})', currency_negative_bold_format)
+        sheet.write_formula(
+            total_row, 6, f'=SUM(G{data_start_row + 1}:G{total_row})', currency_negative_bold_format)
+        sheet.write_formula(
+            total_row, 7, f'=SUM(H{data_start_row + 1}:H{total_row})', currency_negative_bold_format)
+        sheet.write_formula(
+            total_row, 8, f'=SUM(I{data_start_row + 1}:I{total_row})', currency_negative_bold_format)
+        sheet.write_formula(
+            total_row, 9, f'=SUM(J{data_start_row + 1}:J{total_row})', currency_negative_bold_format)
+        sheet.write_formula(
+            total_row, 10, f'=SUM(K{data_start_row + 1}:K{total_row})', currency_bold_format)
+        
+        # Empty CE Status cell
+        sheet.write(total_row, 11, '', formats['section_header_no_border'])
+        
+        # Sum for PER CSD
+        sheet.write_formula(
+            total_row, 12, f'=SUM(M{data_start_row + 1}:M{total_row})', currency_bold_format)
+        
+        # Sum for VARIANCE
+        sheet.write_formula(
+            total_row, 13, f'=SUM(N{data_start_row + 1}:N{total_row})', currency_bold_format)
+        
+        # Sum for COST TO CLIENT
+        sheet.write_formula(
+            total_row, 14, f'=SUM(O{data_start_row + 1}:O{total_row})', currency_bold_format)
+        
+        # Sum for FOR REVENUE ADJUSTMENT
+        sheet.write_formula(
+            total_row, 15, f'=SUM(P{data_start_row + 1}:P{total_row})', currency_bold_format)
+        
+        # Empty REMARKS cell
+        sheet.write(total_row, 16, '', formats['section_header_no_border'])
+
+        return True

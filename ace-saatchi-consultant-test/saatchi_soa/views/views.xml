@@ -11,4 +11,16 @@
             </list>
         </field>
     </record>
+
+    <record id="view_sale_order_list_inherit" model="ir.ui.view">
+        <field name="name">sale.order.list.revenue.inherit</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_quotation_tree_with_onboarding"/>
+        <field name="arch" type="xml">
+            <xpath expr="//list" position="attributes">
+                <attribute name="js_class">sales_order_revenue_list_view</attribute>
+                
+            </xpath>
+        </field>
+    </record>
 </odoo>

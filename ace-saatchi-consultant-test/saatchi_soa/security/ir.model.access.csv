@@ -1,2 +1,4 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_accrued_revenue_report_wizard,access.accrued.revenue_report.wizard,model_accrued_revenue_report_wizard,base.group_user,1,1,1,1
+access_sales_order_revenue_wizard_user,sales.order.revenue_report.wizard.user,model_sales_order_revenue_report_wizard,base.group_user,1,1,1,1
+access_sales_order_revenue_wizard_manager,sales.order.revenue_report.wizard.manager,model_sales_order_revenue_report_wizard,base.group_user,1,1,1,1

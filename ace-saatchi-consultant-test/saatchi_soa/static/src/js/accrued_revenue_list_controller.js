@@ -39,3 +39,40 @@ export const accruedRevenueListView = {
 registry
   .category("views")
   .add("accrued_revenue_list_view", accruedRevenueListView);
+
+
+  export class SalesOrderRevenueListController extends ListController {
+  setup() {
+    super.setup();
+    this.actionService = useService("action");
+  }
+
+  /**
+   * Open the Sales Order Revenue Report wizard
+   */
+  async onPrintSalesOrderRevenue() {
+    // Open the wizard
+    await this.actionService.doAction({
+      type: "ir.actions.act_window",
+      res_model: "sales.order.revenue_report.wizard",
+      view_mode: "form",
+      views: [[false, "form"]],
+      target: "new",
+      name: "Generate Sales Order Revenue Report",
+    });
+  }
+}
+
+// Link controller to the template with buttons
+SalesOrderRevenueListController.template =
+  "saatchi_soa.SalesOrderRevenueListView.Buttons";
+
+export const salesOrderRevenueListView = {
+  ...listView,
+  Controller: SalesOrderRevenueListController,
+};
+
+// Register the custom list view
+registry
+  .category("views")
+  .add("sales_order_revenue_list_view", salesOrderRevenueListView);
