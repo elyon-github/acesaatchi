@@ -41,4 +41,15 @@
         <field name="binding_model_id" ref="sale.model_sale_order"/>
         <field name="binding_type">report</field>
     </record>
+
+
+    <record id="action_report_sales_order_revenue_xlsx" model="ir.actions.report">
+        <field name="name">Revenue Report (XLSX)</field>
+        <field name="model">sale.order</field>
+        <field name="report_type">xlsx</field>
+        <field name="report_name">sales_order_revenue_xlsx</field>
+        <field name="report_file">sales_order_revenue_xlsx</field>
+        <field name="binding_model_id" ref="sale.model_sale_order"/>
+        <field name="binding_type">report</field>
+    </record>
 </odoo>

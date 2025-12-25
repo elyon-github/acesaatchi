@@ -25,6 +25,7 @@ Long description of module's purpose
         'security/ir.model.access.csv',
         'views/views.xml',
         'views/accrued_revenue_wizard_view.xml',
+        'views/revenue_report_wizard_view.xml',
         'reports/saatchi_xlsx_reports.xml'
     ],
     # only loaded in demonstration mode

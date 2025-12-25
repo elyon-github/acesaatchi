@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Inherit and override the pdf_export_main template -->
+    <template id="pdf_export_main_custom" inherit_id="account_reports.pdf_export_main">
+        
+        <!-- Replace the header section -->
+        <xpath expr="//div[@class='row o_header_font']" position="replace">
+            <div class="row o_header_font">
+                <!-- Detect orientation based on report_id -->
+                <t t-set="is_landscape" t-value="options.get('report_id') in [11, 12]"/>
+
+                <t t-if="is_landscape">
+                    <!-- LANDSCAPE layout for report_id 11 or 12 -->
+                    <div class="col-9">
+                        <t t-call="{{custom_templates.get('company_information', 'account_reports.company_information')}}"/>
+                    </div>
+                    <div class="col-3">
+                        <t t-set="company_names" t-value="[company['name'] for company in options['companies']]"/>
+                        <t t-set="user_tz" t-value="env.user.tz or 'UTC'"/>
+                        <t t-set="tz_offset" t-value="int(datetime.datetime.now(datetime.timezone.utc).astimezone(datetime.timezone(datetime.timedelta(hours=8))).strftime('%z')[:3]) if user_tz == 'Asia/Manila' else 0"/>
+                        <t t-set="current_time" t-value="datetime.datetime.now() + datetime.timedelta(hours=tz_offset)"/>
+                        <div class="border p-3">
+                            <div><strong>Software Name:</strong> <span>Odoo 18</span></div>
+                            <div><strong>Date Run:</strong> <span t-out="current_time.strftime('%m/%d/%Y %I:%M %p')"/></div>
+                            <div><strong>Printed By:</strong> <span t-esc="env.user.name"/></div>
+                        </div>
+                    </div>
+                </t>
+                <t t-else="">
+                    <!-- PORTRAIT layout for all other reports -->
+                    <div class="col-8">
+                        <t t-call="{{custom_templates.get('company_information', 'account_reports.company_information')}}"/>
+                    </div>
+                    <div class="col-4">
+                        <t t-call="{{custom_templates.get('pdf_export_filters', 'account_reports.pdf_export_filters')}}"/>
+                    </div>
+                </t>
+            </div>
+        </xpath>
+        
+    </template>
+
+    <!-- Inherit and override the journal_report_pdf_export_main template -->
+    <template id="journal_report_pdf_export_main_custom" inherit_id="account_reports.journal_report_pdf_export_main">
+        
+        <!-- Replace the header row -->
+        <xpath expr="//header/div[@class='row align-items-center']" position="replace">
+            <div class="row align-items-center">
+                <div class="col-4 o_header_font">
+                    <t t-call="account_reports.company_information"/>
+                </div>
+                <div class="col-4">
+                    <div class="o_title">
+                        <t t-if="report.filter_show_draft and options['all_entries']">[Draft]</t>
+                        <t t-out="report.name"/>
+                    </div>
+                    <div class="o_subtitle">
+                        <t t-out="options['date']['date_from']"/> - <t t-out="options['date']['date_to']"/>
+                    </div>
+                </div>
+                <!-- Custom Markie section -->
+                <div class="col-4">
+                    <t t-set="company_names" t-value="[company['name'] for company in options['companies']]"/>
+                    <t t-set="user_tz" t-value="env.user.tz or 'UTC'"/>
+                    <t t-set="tz_offset" t-value="int(datetime.datetime.now(datetime.timezone.utc).astimezone(datetime.timezone(datetime.timedelta(hours=8))).strftime('%z')[:3]) if user_tz == 'Asia/Manila' else 0"/>
+                    <t t-set="current_time" t-value="datetime.datetime.now() + datetime.timedelta(hours=tz_offset)"/>
+                    <div class="border p-3">
+                        <div><strong>Software Name:</strong> <span>Odoo 18</span></div>
+                        <div><strong>Date Run:</strong> <span t-out="current_time.strftime('%m/%d/%Y %I:%M %p')"/></div>
+                        <div><strong>Printed By:</strong> <span t-esc="env.user.name"/></div>
+                    </div>
+                </div>
+            </div>
+        </xpath>
+        
+    </template>
+
+    <!-- Inherit and override the company_information template -->
+    <template id="company_information_custom" inherit_id="account_reports.company_information">
+        
+        <!-- Replace "Tax ID:" with "TIN:" -->
+        <xpath expr="//t[text()='Tax ID:']" position="replace">
+            <t t-else="">TIN:</t>
+        </xpath>
+        
+        <!-- Replace commented "Tax ID:" in second section -->
+        <xpath expr="//t[contains(text(), 'Tax ID:')]" position="replace">
+            TIN: <t t-out="env['account.tax.unit'].browse(options.get('tax_unit')).vat"/>
+        </xpath>
+        
+    </template>
+</odoo>
+

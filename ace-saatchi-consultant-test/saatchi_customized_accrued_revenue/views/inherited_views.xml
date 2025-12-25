@@ -96,5 +96,20 @@
         </field>
     </record>
    
+
+
+    <record id="view_account_move_line_list_inherit_base" model="ir.ui.view">
+        <field name="name">account.move.line.list.inherit.base</field>
+        <field name="model">account.move.line</field>
+        <field name="inherit_id" ref="account.view_move_line_tree"/>
+        <field name="arch" type="xml">
+          <xpath expr="//list[@name='move_line_tree']/field[@name='partner_id']" position="after">
+            <field name="x_ce_code" optional="show"/>
+            <field name="x_client_product_ce_code" optional="show"/>
+            <field name="x_ce_date" optional="show"/>
+          </xpath>
+        </field>
+    </record>
+    
     </data>
 </odoo>

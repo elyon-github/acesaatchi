@@ -246,6 +246,7 @@
             </xpath>
             <xpath expr="//field[@name='partner_id']" position="after">
                 <field name="x_ce_code" optional="show"/>
+                <field name="x_client_product_ce_code" optional="show"/>
                 <field name="x_ce_date" optional="show"/>
             </xpath>
             <xpath expr="//field[@name='credit']" position="after">
@@ -289,7 +290,7 @@
                     <field name="tax_line_id" string="Originator Tax"/>
                     <field name="reconcile_model_id"/>
                     <separator/>
-                    <filter string="Accrual Account Only" name="accrual_account" domain="[('account_id.id', '=', 5932)]" help="Default Accrual Account"/>
+                    <filter string="Exclude Non-Revenue Related" name="customer_invoices" domain="['|', ('journal_id.id', '=', 9), ('journal_id.id', '=', 34)]" help="Exclude Non-Revenue Related"/>                    <!-- <filter string="Accrual Account Only" name="accrual_account" domain="[('account_id.id', '=', 5932)]" help="Default Accrual Account"/> -->
                     <separator/>
                     <filter string="Unposted" name="unposted" domain="[('parent_state', '=', 'draft')]" help="Unposted Journal Items"/>
                     <filter string="Posted" name="posted" domain="[('parent_state', '=', 'posted')]" help="Posted Journal Items"/>
@@ -322,6 +323,9 @@
                         <filter string="Journal Entry" name="group_by_move" domain="[]" context="{'group_by': 'move_name'}"/>
                         <filter string="Account" name="group_by_account" domain="[]" context="{'group_by': 'account_id'}"/>
                         <filter string="CE Code" name="group_by_x_ce_code" domain="[]" context="{'group_by': 'x_ce_code'}"/>
+                        <filter string="Client Product" name="groupby_x_client_product_ce_code" domain="[]" context="{'group_by': 'x_client_product_ce_code'}"/>
+                        <filter string="Salesperson" name="groupby_x_salesperson_id" domain="[]" context="{'group_by': 'x_salesperson_id'}"/>
+                        <filter string="Sales Team" name="groupby_x_salesteam_id" domain="[]" context="{'group_by': 'x_salesteam_id'}"/>
                         <filter string="Entry Type" name="group_by_x_type_of_entry" domain="[]" context="{'group_by': 'x_type_of_entry'}"/>
                         <filter string="Partner" name="group_by_partner" domain="[]" context="{'group_by': 'partner_id'}"/>
                         <filter string="Journal" name="journal" domain="[]" context="{'group_by': 'journal_id'}"/>
