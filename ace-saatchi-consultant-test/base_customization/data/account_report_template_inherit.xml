@@ -32,7 +32,15 @@
                         <t t-call="{{custom_templates.get('company_information', 'account_reports.company_information')}}"/>
                     </div>
                     <div class="col-4">
-                        <t t-call="{{custom_templates.get('pdf_export_filters', 'account_reports.pdf_export_filters')}}"/>
+                        <t t-set="company_names" t-value="[company['name'] for company in options['companies']]"/>
+                        <t t-set="user_tz" t-value="env.user.tz or 'UTC'"/>
+                        <t t-set="tz_offset" t-value="int(datetime.datetime.now(datetime.timezone.utc).astimezone(datetime.timezone(datetime.timedelta(hours=8))).strftime('%z')[:3]) if user_tz == 'Asia/Manila' else 0"/>
+                        <t t-set="current_time" t-value="datetime.datetime.now() + datetime.timedelta(hours=tz_offset)"/>
+                        <div class="border p-3">
+                            <div><strong>Software Name:</strong> <span>Odoo 18</span></div>
+                            <div><strong>Date Run:</strong> <span t-out="current_time.strftime('%m/%d/%Y %I:%M %p')"/></div>
+                            <div><strong>Printed By:</strong> <span t-esc="env.user.name"/></div>
+                        </div>
                     </div>
                 </t>
             </div>
