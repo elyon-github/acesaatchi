@@ -2,7 +2,7 @@
 from odoo import models, fields, api
 from odoo.exceptions import UserError, ValidationError
 from dateutil.relativedelta import relativedelta
-
+from odoo import models, _
 
 class InheritUsers(models.Model):
     _inherit = 'res.users'
