@@ -2,12 +2,14 @@
 <templates id="template" xml:space="preserve">
     <t t-name="saatchi_soa.AccruedRevenueLinesListView.Buttons" t-inherit="web.ListView">
         <xpath expr="//Layout/t[@t-set-slot='control-panel-create-button']" position="inside">
+        <t t-if="hasAccruedRevenueAccess">
             <button type="button" 
                     class="btn btn-primary" 
                     style="margin-right: 10px;" 
                     t-on-click="onPrintAccruedRevenue">
                 <i class="fa fa-file-excel-o"/> Print Accrued Revenue
             </button>
+        </t>
         </xpath>
     </t>
 
@@ -15,12 +17,14 @@
     <!-- Button Template for Sales Order Revenue Report -->
     <t t-name="saatchi_soa.SalesOrderRevenueListView.Buttons" t-inherit="web.ListView">
         <xpath expr="//Layout/t[@t-set-slot='control-panel-create-button']" position="inside">
+        <t t-if="hasSalesOrderRevenueAccess">
             <button type="button" 
                     class="btn btn-primary" 
                     style="margin-right: 10px;" 
                     t-on-click="onPrintSalesOrderRevenue">
                 <i class="fa fa-file-excel-o"/> Print Revenue Report
             </button>
+        </t>
         </xpath>
     </t>
 </templates>
