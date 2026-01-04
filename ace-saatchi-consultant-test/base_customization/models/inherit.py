@@ -736,13 +736,14 @@ class HrLeave(models.Model):
 
     # TODO: Dynamic Approval in SL Type if self.duration_display > 3 days then the self.validation_type becomes 'both' else 'manager' only. - Done
     # TODO: Change Second Approval in State Color Purple
-    # TODO: INV00001 FORMAT OF INVOICES IN FORMS PDF REPORT
+    # TODO: INV00001 FORMAT OF INVOICES IN FORMS PDF REPORT - Assigned to Justin
     #  - INV000001 (Billing - Invoice Format)
     #  - BIL000001 - Vendor Bill
     #  - JVN000001 - JV
     #  - SO000001 - CE
     #  - PON000001 - Purchase Order No.
     #  - ORN000001 - Official Receipt
+    #
 
     # IT Team Client Training
     # Discuss General Settings:
