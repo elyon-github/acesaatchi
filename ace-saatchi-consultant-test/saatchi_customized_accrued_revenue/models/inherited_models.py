@@ -519,51 +519,115 @@ class AccountMove(models.Model):
                 move.x_type_of_entry = f'reversal_{suffix}'
             else:
                 move.x_type_of_entry = f'accrued_{suffix}'
+                
+                
+    x_sales_order = fields.Many2one(
+        'sale.order',
+        string="Sales Order",
+        compute="_compute_sales_order",
+        store=True
+    )
+    
+    @api.depends('invoice_line_ids.sale_line_ids',
+                 'invoice_line_ids.sale_line_ids.order_id',
+                 'x_related_custom_accrued_record',
+                 'x_related_custom_accrued_record.x_related_ce_id')
+    def _compute_sales_order(self):
+        """Compute linked sale order"""
+        for move in self:
+            so = False
+            # Priority 1: Get from accrued record
+            if move.x_related_custom_accrued_record and move.x_related_custom_accrued_record.x_related_ce_id:
+                so = move.x_related_custom_accrued_record.x_related_ce_id
+            # Priority 2: Get from invoice lines
+            elif move.invoice_line_ids:
+                sale_lines = move.invoice_line_ids.mapped('sale_line_ids')
+                if sale_lines:
+                    so = sale_lines[0].order_id
+            
+            move.x_sales_order = so
 
 
 class AccountMoveLine(models.Model):
-    """
-    Account Move Line Extension
-
-    Adds custom fields for tracking CE-related information on journal entry lines.
-    """
     _inherit = "account.move.line"
-
+    
     x_ce_code = fields.Char(
         string="CE Code",
+        compute="_compute_ce_fields",
+        store=True,
         help="Contract Estimate code from sale order"
     )
 
-    x_sale_order = fields.Many2one(
-        related='move_id.x_related_custom_accrued_record.x_related_ce_id')
-
-    x_ce_date = fields.Date(
-        string="CE Date",
-        help="Contract Estimate date from sale order"
+        
+    x_sales_order = fields.Many2one(
+        'sale.order',
+        string="Sales Order",
+        related='move_id.x_sales_order',  # Now just use related!
+        store=True
+    )
+    x_salesperson_id = fields.Many2one(
+        'res.users',
+        string="Salesperson",
+        store=True,
+        related='x_sales_order.user_id'
     )
 
+    x_salesteam_id = fields.Many2one(
+        'crm.team',
+        string="Sales Team",
+        store=True,
+        related='x_sales_order.team_id')
+        
+    x_client_product_ce_code = fields.Many2one(
+        'product.template',
+        store=True,
+        string="Client Product",
+    )
+    x_ce_date = fields.Date(
+        string="CE Date",
+        compute="_compute_ce_fields",
+        store=True,
+        help="Contract Estimate date from sale order"
+    )
+    
+    x_ce_status = fields.Selection(
+        [
+            ('for_client_signature', 'For Client Signature'),
+            ('signed', 'Signed'),
+            ('billable', 'Billable'),
+            ('closed', 'Closed'),
+            ('cancelled', 'Cancelled')
+        ],
+        string='C.E. Status',
+        compute="_compute_ce_fields",
+        store=True
+    )
+    
     x_remarks = fields.Char(
         string="Remarks",
         help="Additional remarks for this journal entry line"
     )
-
+    
     x_reference = fields.Char(
         string="Reference",
         related='move_id.ref'
     )
-
+    
     x_is_reversal = fields.Boolean(
         string="Is Reversal Entry?",
-        related='move_id.x_is_reversal')
-
+        related='move_id.x_is_reversal'
+    )
+    
     x_is_accrued_entry = fields.Boolean(
         string="Is Accrued Entry?",
-        related='move_id.x_is_accrued_entry')
-
+        related='move_id.x_is_accrued_entry'
+    )
+    
     x_is_adjustment_entry = fields.Boolean(
         string="Is Adjustment Entry?",
-        related='move_id.x_is_accrued_entry')
-
+        related='move_id.x_is_accrued_entry'
+    )
+    
     x_type_of_entry = fields.Selection(
         selection=[
             ('reversal_system', 'Reversal Entry - System'),
@@ -578,18 +642,25 @@ class AccountMoveLine(models.Model):
         store=True,
         readonly=True
     )
-
-    x_ce_status = fields.Selection(
-        [
-            ('for_client_signature', 'For Client Signature'),
-            ('signed', 'Signed'),
-            ('billable', 'Billable'),
-            ('closed', 'Closed'),
-            ('cancelled', 'Cancelled')
-        ],
-        string='C.E. Status',
-        related='move_id.x_related_custom_accrued_record.ce_status'
-    )
+    
+    @api.depends('x_sales_order', 
+                 'x_sales_order.x_ce_code',
+                 'x_sales_order.date_order', 
+                 'x_sales_order.x_ce_status')
+    def _compute_ce_fields(self):
+        """Compute CE-related fields from linked sale order"""
+        for line in self:
+            so = line.x_sales_order
+            if so:
+                line.x_ce_code = so.x_ce_code
+                line.x_ce_date = so.date_order
+                line.x_ce_status = so.x_ce_status
+                line.x_client_product_ce_code = so.x_client_product_ce_code.x_product_id.id if so.x_client_product_ce_code and so.x_client_product_ce_code.x_product_id else False
+            else:
+                line.x_ce_code = False
+                line.x_ce_date = False
+                line.x_ce_status = False
+                line.x_client_product_ce_code = False
 
 
 class GeneralLedgerCustomHandler(models.AbstractModel):

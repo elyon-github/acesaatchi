@@ -200,8 +200,8 @@ class AccruedRevenueXLSX(models.AbstractModel):
                 grouped[partner_name][ce_code]['description'] = desc.upper()
 
             if line.x_ce_status and not grouped[partner_name][ce_code]['ce_status']:
-                var = line._fields['x_ce_status'].selection(line)
-                ce_status = dict(var).get(line.x_ce_status)
+                selection_dict = dict(line._fields['x_ce_status'].selection)
+                ce_status = selection_dict.get(line.x_ce_status, '')
                 grouped[partner_name][ce_code]['ce_status'] = ce_status.upper()
 
         return grouped
@@ -577,8 +577,8 @@ class AccruedRevenueXLSX(models.AbstractModel):
             sheet.write(row, 8, line.x_reference or '', formats['normal'])
 
             # CE Status
-            var = line._fields['x_ce_status'].selection(line)
-            ce_status = dict(var).get(line.x_ce_status, '')
+            selection_dict = dict(line._fields['x_ce_status'].selection)
+            ce_status = selection_dict.get(line.x_ce_status, '')
             sheet.write(row, 9, ce_status, formats['centered'])
 
             # Debit
@@ -752,8 +752,8 @@ class AccruedRevenueXLSX(models.AbstractModel):
             sheet.write(row, 8, line.x_reference or '', formats['normal'])
 
             # CE Status
-            var = line._fields['x_ce_status'].selection(line)
-            ce_status = dict(var).get(line.x_ce_status, '')
+            selection_dict = dict(line._fields['x_ce_status'].selection)
+            ce_status = selection_dict.get(line.x_ce_status, '')
             sheet.write(row, 9, ce_status, formats['centered'])
 
             # Debit

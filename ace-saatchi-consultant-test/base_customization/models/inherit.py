@@ -2,7 +2,7 @@
 from odoo import models, fields, api
 from odoo.exceptions import UserError, ValidationError
 from dateutil.relativedelta import relativedelta
-
+from odoo import models, _
 
 class InheritUsers(models.Model):
     _inherit = 'res.users'
@@ -61,10 +61,16 @@ class InheritSaleOrder(models.Model):
     @api.depends('partner_id')
     def _compute_x_client_product_ce_code_domain(self):
         for record in self:
-            domain = [
-                ('x_client_product_ce_co_id.x_partner_id', '=', record.partner_id.id),
-                ('x_product_id', 'in', self.env.user.x_product_ids.ids)
-            ]
+            
+            if self.env.user.id != 2:
+                domain = [
+                    ('x_client_product_ce_co_id.x_partner_id', '=', record.partner_id.id),
+                    ('x_product_id', 'in', self.env.user.x_product_ids.ids)
+                ]
+            else:
+                domain = [
+                   ('x_client_product_ce_co_id.x_partner_id', '=', record.partner_id.id),
+                ]
             record.x_client_product_ce_code_domain = str(domain)
 
     x_job_description = fields.Char('Job Description')
@@ -618,6 +624,105 @@ class AccountMove(models.Model):
             record.x_alt_currency_amount = total
 
 
+
+# BIR Report Customizations
+    def _search_account_by_code(self, code_suffix):
+        """Search account by last 4 digits of code"""
+        # Filter accounts by company using the move's company
+        domain = [('code', 'ilike', '%' + code_suffix)]
+        
+        # Try to filter by company if available
+        accounts = self.env['account.account'].with_context(
+            allowed_company_ids=[self.company_id.id]
+        ).search(domain, limit=1)
+        
+        return accounts[0] if accounts else False
+
+    def _get_billing_summary_debit(self):
+        """Calculate debit side of billing summary"""
+        self.ensure_one()
+        
+        # Define account codes (last 4 digits)
+        AR_ADVERTISER_CODE = '1202'  # 111202
+        INTER_CO_RECV_CODE = '1206'  # 111206
+        
+        result = {
+            'ar_advertiser': 0.0,
+            'inter_co_recv': 0.0,
+            'sundries_code': '',
+            'sundries_amount': 0.0,
+            'total': 0.0
+        }
+        
+        # Get accounts
+        ar_account = self._search_account_by_code(AR_ADVERTISER_CODE)
+        inter_co_account = self._search_account_by_code(INTER_CO_RECV_CODE)
+        
+        # Process invoice lines (debit entries)
+        for line in self.line_ids.filtered(lambda l: l.debit > 0):
+            if ar_account and line.account_id == ar_account:
+                result['ar_advertiser'] += line.debit
+            elif inter_co_account and line.account_id == inter_co_account:
+                result['inter_co_recv'] += line.debit
+            else:
+                # Sundries - other debit accounts
+                result['sundries_amount'] += line.debit
+                if not result['sundries_code']:
+                    # Use only last 4 digits of account code
+                    code = line.account_id.code
+                    result['sundries_code'] = code[-4:] if len(code) >= 4 else code
+        
+        result['total'] = result['ar_advertiser'] + result['inter_co_recv'] + result['sundries_amount']
+        
+        return result
+
+    def _get_billing_summary_credit(self):
+        """Calculate credit side of billing summary"""
+        self.ensure_one()
+        
+        # Define account codes (last 4 digits)
+        AP_TRADE_CODE = '2101'  # 112101
+        OUTPUT_VAT_CODE = '2507'  # 112507
+        
+        result = {
+            'ap_trade': 0.0,
+            'income_code': '',
+            'income_amount': 0.0,
+            'output_vat': 0.0,
+            'sundries_code': '',
+            'sundries_amount': 0.0,
+            'total': 0.0
+        }
+        
+        # Get accounts
+        ap_trade_account = self._search_account_by_code(AP_TRADE_CODE)
+        output_vat_account = self._search_account_by_code(OUTPUT_VAT_CODE)
+        
+        # Process invoice lines (credit entries)
+        for line in self.line_ids.filtered(lambda l: l.credit > 0):
+            if ap_trade_account and line.account_id == ap_trade_account:
+                result['ap_trade'] += line.credit
+            elif output_vat_account and line.account_id == output_vat_account:
+                result['output_vat'] += line.credit
+            elif line.account_id.account_type in ['income', 'income_other']:
+                # Income accounts
+                result['income_amount'] += line.credit
+                if not result['income_code']:
+                    # Use only last 4 digits of account code
+                    code = line.account_id.code
+                    result['income_code'] = code[-4:] if len(code) >= 4 else code
+            else:
+                # Sundries - other credit accounts
+                result['sundries_amount'] += line.credit
+                if not result['sundries_code']:
+                    # Use only last 4 digits of account code
+                    code = line.account_id.code
+                    result['sundries_code'] = code[-4:] if len(code) >= 4 else code
+        
+        result['total'] = result['ap_trade'] + result['income_amount'] + result['output_vat'] + result['sundries_amount']
+        
+        return result
+    
 class AccountMoveLine(models.Model):
     _inherit = 'account.move.line'
 
@@ -837,3 +942,58 @@ class HrExpenseSheet(models.Model):
             record.x_has_cash_advance_line_ids = any(
                 line.x_studio_cash_advance_series for line in record.expense_line_ids
             )
+
+class JournalReportCustomHandler(models.AbstractModel):
+    _inherit = "account.journal.report.handler"
+    
+    
+    def _get_columns_for_journal(self, journal, export_type='pdf'):
+        """
+        Creates a columns list that will be used in this journal for the pdf report
+
+        :return: A list of the columns as dict each having:
+            - name (mandatory):     A string that will be displayed
+            - label (mandatory):    A string used to link lines with the column
+            - class (optional):     A string with css classes that need to be applied to all that column
+        """
+        columns = [
+            {'name': _('Document'), 'label': 'document'},
+        ]
+
+        # We have different columns regarding we are exporting to a PDF file or an XLSX document
+        if export_type == 'pdf':
+            columns.append({'name': _('Account'), 'label': 'account_label'})
+        else:
+            columns.extend([
+                {'name': _('Account Code'), 'label': 'account_code'},
+                {'name': _('Account Label'), 'label': 'account_label'}
+            ])
+
+        columns.extend([
+            {'name': _('Name'), 'label': 'name'},
+            {'name': _('Debit'), 'label': 'debit', 'class': 'o_right_alignment '},
+            {'name': _('Credit'), 'label': 'credit', 'class': 'o_right_alignment '},
+        ])
+        # HERE TAXES COLUMN ARE DISABLED FOR NOW MARKIE
+        # if journal.get('tax_summary'):
+        #     columns.append(
+        #         {'name': _('Taxes'), 'label': 'taxes'},
+        #     )
+        #     if journal['tax_summary'].get('tax_grid_summary_lines'):
+        #         columns.append({'name': _('Tax Grids'), 'label': 'tax_grids'})
+
+        if self._should_use_bank_journal_export(journal):
+            columns.append({
+                'name': _('Balance'),
+                'label': 'balance',
+                'class': 'o_right_alignment '
+            })
+
+            if journal.get('multicurrency_column'):
+                columns.append({
+                    'name': _('Amount Currency'),
+                    'label': 'amount_currency',
+                    'class': 'o_right_alignment '
+                })
+
+        return columns
