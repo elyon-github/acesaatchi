@@ -3,7 +3,7 @@ from odoo import models, fields, api
 from odoo.exceptions import UserError, ValidationError
 from dateutil.relativedelta import relativedelta
 from odoo import models, _
-
+from datetime import timedelta
 class InheritUsers(models.Model):
     _inherit = 'res.users'
 
@@ -830,104 +830,288 @@ class HrLeaveType(models.Model):
 class HrLeave(models.Model):
     _inherit = 'hr.leave'
 
-    # @api.model
-    # def create(self, vals):
-
-    #     raise UserError(self.validation_type)
-    #     # Call the parent create method
-    #     res = super(HrLeave, self).create(vals)
-
-    #     return res
-
-    # TODO: Dynamic Approval in SL Type if self.duration_display > 3 days then the self.validation_type becomes 'both' else 'manager' only. - Done
-    # TODO: Change Second Approval in State Color Purple
-    # TODO: INV00001 FORMAT OF INVOICES IN FORMS PDF REPORT - Assigned to Justin
-    #  - INV000001 (Billing - Invoice Format)
-    #  - BIL000001 - Vendor Bill
-    #  - JVN000001 - JV
-    #  - SO000001 - CE
-    #  - PON000001 - Purchase Order No.
-    #  - ORN000001 - Official Receipt
-    #
-
-    # IT Team Client Training
-    # Discuss General Settings:
-    # XLSX Export  / Import Feature
-    # Discuss Studio:
-    # Discuss Approval Studio:
-    # Discuss Access Rights:
-    # Discuss Record Rules:
-    # Discuss Client and Product Assignments:
-    # Discuss Installation of Applications:
-
     def _get_responsible_for_approval(self):
         self.ensure_one()
         responsible = self.env['res.users']
-
         leave_type = self.holiday_status_id
         threshold = leave_type.employer_approver_only_on_days
         is_short_leave = threshold and self.number_of_days <= threshold
         is_dual_validation = self.validation_type == 'both'
-
-        # Determine the effective validation type without modifying the record
+        
+        # Determine the effective validation type
         effective_validation_type = self.validation_type
-
-        # If the leave duration is within the configured short-leave threshold
-        # and the leave type normally requires both manager and HR approval,
-        # downgrade the approval flow to employer/manager-only.
+        # Short leaves: Manager approves (bypass HR)
         if is_dual_validation and is_short_leave and threshold:
             effective_validation_type = 'manager'
-
-        # SWAP: HR OFFICER FIRST (confirm state)
+        
+        # SWAPPED FLOW: HR Officer first, Manager second
         if effective_validation_type == 'hr' or (effective_validation_type == 'both' and self.state == 'confirm'):
+            # HR Officer approves first for long leaves
             if self.holiday_status_id.responsible_ids:
                 responsible = self.holiday_status_id.responsible_ids
-
-        # SWAP: MANAGER SECOND (validate1 state)
         elif effective_validation_type == 'manager' or (effective_validation_type == 'both' and self.state == 'validate1'):
+            # Manager approves: either short leaves directly OR second approval for long leaves
             if self.employee_id.leave_manager_id:
                 responsible = self.employee_id.leave_manager_id
             elif self.employee_id.parent_id.user_id:
                 responsible = self.employee_id.parent_id.user_id
-
+        
         return responsible
 
-    # Disable Probationary Leave Restriction
-    # @api.model
-    # def create(self, vals):
-    #     # Check if employee_id and holiday_status_id are in vals
-    #     if vals.get('employee_id') and vals.get('holiday_status_id') == 5:
-    #         # Get the employee record
-    #         employee = self.env['hr.employee'].sudo().browse(
-    #             vals.get('employee_id'))
+    def action_approve(self, check_state=True):
+        # SWAPPED FLOW:
+        # - Short leaves: Manager approves directly
+        # - Long leaves: HR Officer approves first (confirm → validate1)
+        
+        if check_state and any(holiday.state != 'confirm' for holiday in self):
+            raise UserError(_('Time off request must be confirmed ("To Approve") in order to approve it.'))
+        
+        current_employee = self.env.user.employee_id
+        
+        # Separate leaves based on approval flow
+        needs_hr_approval = self.env['hr.leave']      # Long leaves needing HR approval first
+        needs_manager_approval = self.env['hr.leave']  # Short leaves needing Manager approval
+        needs_standard_approval = self.env['hr.leave'] # Other validation types
+        
+        for holiday in self:
+            if holiday.validation_type == 'both':
+                threshold = holiday.holiday_status_id.employer_approver_only_on_days
+                is_short_leave = threshold and holiday.number_of_days <= threshold
+                if is_short_leave:
+                    # Short leave: Manager approves directly (bypass HR)
+                    needs_manager_approval |= holiday
+                else:
+                    # Long leave: HR Officer approves first
+                    needs_hr_approval |= holiday
+            else:
+                needs_standard_approval |= holiday
+        
+        # SWAPPED: Long leaves go to validate1 (HR Officer first approval)
+        needs_hr_approval.write({'state': 'validate1', 'first_approver_id': current_employee.id})
+        
+        # Short leaves and other types go directly to validate
+        (needs_manager_approval | needs_standard_approval).action_validate(check_state)
+        
+        if not self.env.context.get('leave_fast_create'):
+            self.activity_update()
+        return True
 
-    #         # Check if employment start date is set
-    #         if employee.x_studio_employment_start_date:
-    #             # Get the request date from vals
-    #             request_date = fields.Date.from_string(
-    #                 vals.get('request_date_from'))
-    #             employment_start = employee.x_studio_employment_start_date
-    #             delta = relativedelta(request_date, employment_start)
 
-    #             # Calculate when 6 months will be completed
-    #             six_months_date = employment_start + relativedelta(months=6)
-    #             remaining_delta = relativedelta(six_months_date, request_date)
 
-    #             # If less than 6 months at the time of request, raise error with details
-    #             if delta.months < 6 and delta.years == 0:
-    #                 raise UserError(
-    #                     f'You are still in probationary period.\n\n'
-    #                     f'Employment Start Date: {employment_start.strftime("%B %d, %Y")}\n'
-    #                     f'Requested Leave Date: {request_date.strftime("%B %d, %Y")}\n'
-    #                     f'Time Employed by Request Date: {delta.months} month(s) and {delta.days} day(s)\n'
-    #                     f'Remaining Time: {remaining_delta.months} month(s) and {remaining_delta.days} day(s)\n'
-    #                     f'This time off type can be used starting {six_months_date.strftime("%B %d, %Y")}.'
-    #                 )
+    def _check_approval_update(self, state):
+        """ Check if target state is achievable. """
+        if self.env.is_superuser():
+            return
+    
+        current_employee = self.env.user.employee_id
+        is_officer = self.env.user.has_group('hr_holidays.group_hr_holidays_user')
+        is_manager = self.env.user.has_group('hr_holidays.group_hr_holidays_manager')
+    
+        for holiday in self:
+            val_type = holiday.validation_type
+            
+            # Calculate effective validation type for short leaves
+            threshold = holiday.holiday_status_id.employer_approver_only_on_days
+            is_short_leave = threshold and holiday.number_of_days <= threshold
+            effective_val_type = 'manager' if (val_type == 'both' and is_short_leave) else val_type
+    
+            if not is_manager:
+                if holiday.state == 'cancel' and state != 'confirm':
+                    raise UserError(_('A cancelled leave cannot be modified.'))
+                if state == 'confirm':
+                    if holiday.state == 'refuse':
+                        raise UserError(_('Only a Time Off Manager can reset a refused leave.'))
+                    if holiday.date_from and holiday.date_from.date() <= fields.Date.today():
+                        raise UserError(_('Only a Time Off Manager can reset a started leave.'))
+                    if holiday.employee_id != current_employee:
+                        raise UserError(_('Only a Time Off Manager can reset other people leaves.'))
+                else:
+                    if effective_val_type == 'no_validation' and current_employee == holiday.employee_id and (is_officer or is_manager):
+                        continue
+                        
+                    holiday.check_access('write')
+    
+                    if holiday.employee_id == current_employee\
+                            and self.env.user != holiday.employee_id.leave_manager_id\
+                            and not is_officer:
+                        raise UserError(_('Only a Time Off Officer or Manager can approve/refuse its own requests.'))
+    
+                    # SWAPPED FLOW PERMISSION CHECKS
+                    
+                    # validate1 state: HR Officer first approval (for long leaves)
+                    if state == 'validate1' and effective_val_type == 'both':
+                        # SWAPPED: HR Officer gives first approval
+                        if not is_officer:
+                            raise UserError(_('You must be a Time off Officer to provide first approval for this leave'))
+    
+                    # validate state: Final approval
+                    elif state == 'validate':
+                        if effective_val_type == 'manager':
+                            # Manager approval (short leaves OR standard manager validation)
+                            if self.env.user != holiday.employee_id.leave_manager_id and not is_officer:
+                                raise UserError(_("You must be %s's Manager to approve this leave", holiday.employee_id.name))
+                        
+                        elif effective_val_type == 'hr':
+                            # HR-only approval
+                            if not is_officer:
+                                raise UserError(_('You must be a Time off Officer to approve this leave'))
+                        
+                        elif effective_val_type == 'both':
+                            # SWAPPED: Manager gives second approval (validate1 → validate)
+                            if self.env.user != holiday.employee_id.leave_manager_id and not is_officer:
+                                raise UserError(_("You must be %s's Manager to provide second approval", holiday.employee_id.name))
 
-    #     # Call the parent create method
-    #     res = super(HrLeave, self).create(vals)
 
-    #     return res
+    
+    def action_validate(self, check_state=True):
+        current_employee = self.env.user.employee_id
+        leaves = self._get_leaves_on_public_holiday()
+        if leaves:
+            raise ValidationError(_('The following employees are not supposed to work during that period:\n %s') % ','.join(leaves.mapped('employee_id.name')))
+        if check_state and any(holiday.state not in ['confirm', 'validate1'] and holiday.validation_type != 'no_validation' for holiday in self):
+            raise UserError(_('Time off request must be confirmed in order to approve it.'))
+    
+        self.write({'state': 'validate'})
+    
+        for leave in self:
+            threshold = leave.holiday_status_id.employer_approver_only_on_days
+            is_short_leave = threshold and leave.number_of_days <= threshold
+            
+            if leave.validation_type == 'both':
+                if is_short_leave:
+                    # Short leave: Manager is the sole approver
+                    leave.first_approver_id = current_employee.id
+                elif leave.state == 'validate1':
+                    # SWAPPED: Long leave coming from validate1 - Manager is second approver
+                    leave.second_approver_id = current_employee.id
+                else:
+                    # Coming directly from confirm (shouldn't happen in swapped flow for long leaves)
+                    leave.first_approver_id = current_employee.id
+            elif leave.validation_type == 'manager':
+                leave.first_approver_id = current_employee.id
+            else:  # 'hr' or 'no_validation'
+                leave.first_approver_id = current_employee.id
+    
+        self._validate_leave_request()
+        if not self.env.context.get('leave_fast_create'):
+            self.filtered(lambda holiday: holiday.validation_type != 'no_validation').activity_update()
+        return True
+    
+    def _check_double_validation_rules(self, employees, state):
+        if self.env.user.has_group('hr_holidays.group_hr_holidays_manager'):
+            return
+    
+        is_leave_user = self.env.user.has_group('hr_holidays.group_hr_holidays_user')
+        
+        # Skip double validation check for short leaves
+        for holiday in self:
+            threshold = holiday.holiday_status_id.employer_approver_only_on_days
+            is_short_leave = threshold and holiday.number_of_days <= threshold
+            if holiday.validation_type == 'both' and is_short_leave:
+                # Short leaves: Manager can approve directly
+                if state in ['validate', 'validate1']:
+                    if self.env.user != holiday.employee_id.leave_manager_id and not is_leave_user:
+                        raise AccessError(_('You cannot approve a time off for %s, because you are not their time off manager', holiday.employee_id.name))
+                return
+        
+        # SWAPPED FLOW: For long leaves with 'both' validation
+        if state == 'validate1':
+            # SWAPPED: First approval is HR Officer
+            if not is_leave_user:
+                raise AccessError(_('You must be a Time Off Officer to provide first approval'))
+        elif state == 'validate':
+            # Second approval or direct validation
+            for holiday in self:
+                if holiday.validation_type == 'both' and holiday.state == 'validate1':
+                    # SWAPPED: Manager gives second approval
+                    if self.env.user != holiday.employee_id.leave_manager_id and not is_leave_user:
+                        raise AccessError(_('You cannot approve a time off for %s, because you are not their time off manager', holiday.employee_id.name))
+                elif holiday.validation_type == 'both' and holiday.state == 'confirm':
+                    # Direct validation from confirm requires HR Officer (shouldn't happen in normal swapped flow)
+                    if not is_leave_user:
+                        raise AccessError(_('You don\'t have the rights to apply approval on a time off request'))
+    
+    
+    def activity_update(self):
+        if self.env.context.get('mail_activity_automation_skip'):
+            return False
+    
+        to_clean, to_do, to_do_confirm_activity = self.env['hr.leave'], self.env['hr.leave'], self.env['hr.leave']
+        activity_vals = []
+        today = fields.Date.today()
+        model_id = self.env['ir.model']._get_id('hr.leave')
+        confirm_activity = self.env.ref('hr_holidays.mail_act_leave_approval')
+        approval_activity = self.env.ref('hr_holidays.mail_act_leave_second_approval')
+        
+        for holiday in self:
+            if holiday.state in ['confirm', 'validate1']:
+                if holiday.holiday_status_id.leave_validation_type != 'no_validation':
+                    if holiday.state == 'confirm':
+                        activity_type = confirm_activity
+                        
+                        # Check if short leave for custom activity note
+                        threshold = holiday.holiday_status_id.employer_approver_only_on_days
+                        is_short_leave = threshold and holiday.number_of_days <= threshold
+                        
+                        if holiday.validation_type == 'both' and is_short_leave:
+                            # Short leave: Manager approves
+                            note = _(
+                                'New %(leave_type)s Request (%(days)s days - Manager Approval) created by %(user)s',
+                                leave_type=holiday.holiday_status_id.name,
+                                days=holiday.number_of_days,
+                                user=holiday.create_uid.name,
+                            )
+                        elif holiday.validation_type == 'both':
+                            # SWAPPED: Long leave - HR Officer approves first
+                            note = _(
+                                'New %(leave_type)s Request (HR First Approval Required) created by %(user)s',
+                                leave_type=holiday.holiday_status_id.name,
+                                user=holiday.create_uid.name,
+                            )
+                        else:
+                            note = _(
+                                'New %(leave_type)s Request created by %(user)s',
+                                leave_type=holiday.holiday_status_id.name,
+                                user=holiday.create_uid.name,
+                            )
+                    else:
+                        # SWAPPED: validate1 state - Manager gives second approval
+                        activity_type = approval_activity
+                        note = _(
+                            'Manager (Second Approval) Required for %(leave_type)s',
+                            leave_type=holiday.holiday_status_id.name,
+                        )
+                        to_do_confirm_activity += holiday
+                        
+                    user_ids = holiday.sudo()._get_responsible_for_approval().ids
+                    for user_id in user_ids:
+                        date_deadline = (
+                            (holiday.date_from -
+                             relativedelta(**{activity_type.delay_unit or 'days': activity_type.delay_count or 0})).date()
+                            if holiday.date_from else today)
+                        if date_deadline < today:
+                            date_deadline = today
+                        activity_vals.append({
+                            'activity_type_id': activity_type.id,
+                            'automated': True,
+                            'date_deadline': date_deadline,
+                            'note': note,
+                            'user_id': user_id,
+                            'res_id': holiday.id,
+                            'res_model_id': model_id,
+                        })
+            elif holiday.state == 'validate':
+                to_do |= holiday
+            elif holiday.state in ['refuse', 'cancel']:
+                to_clean |= holiday
+                
+        if to_clean:
+            to_clean.activity_unlink(['hr_holidays.mail_act_leave_approval', 'hr_holidays.mail_act_leave_second_approval'])
+        if to_do_confirm_activity:
+            to_do_confirm_activity.activity_feedback(['hr_holidays.mail_act_leave_approval'])
+        if to_do:
+            to_do.activity_feedback(['hr_holidays.mail_act_leave_approval', 'hr_holidays.mail_act_leave_second_approval'])
+        self.env['mail.activity'].with_context(short_name=False).create(activity_vals)
 
 
 class HrExpenseSheet(models.Model):
