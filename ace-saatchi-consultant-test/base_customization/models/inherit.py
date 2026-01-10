@@ -1049,10 +1049,12 @@ class HrLeave(models.Model):
                     if holiday.state == 'confirm':
                         activity_type = confirm_activity
                         
+                        # Check if short leave for custom activity note
                         threshold = holiday.holiday_status_id.employer_approver_only_on_days
                         is_short_leave = threshold and holiday.number_of_days <= threshold
                         
                         if holiday.validation_type == 'both' and is_short_leave:
+                            # Short leave: Manager approves
                             note = _(
                                 'New %(leave_type)s Request (%(days)s days - Manager Approval) created by %(user)s',
                                 leave_type=holiday.holiday_status_id.name,
@@ -1060,6 +1062,7 @@ class HrLeave(models.Model):
                                 user=holiday.create_uid.name,
                             )
                         elif holiday.validation_type == 'both':
+                            # SWAPPED: Long leave - HR Officer approves first
                             note = _(
                                 'New %(leave_type)s Request (HR First Approval Required) created by %(user)s',
                                 leave_type=holiday.holiday_status_id.name,
@@ -1072,6 +1075,7 @@ class HrLeave(models.Model):
                                 user=holiday.create_uid.name,
                             )
                     else:
+                        # SWAPPED: validate1 state - Manager gives second approval
                         activity_type = approval_activity
                         note = _(
                             'Manager (Second Approval) Required for %(leave_type)s',
@@ -1081,19 +1085,12 @@ class HrLeave(models.Model):
                         
                     user_ids = holiday.sudo()._get_responsible_for_approval().ids
                     for user_id in user_ids:
-                        # MODIFIED: Different deadline calculation for second approval
-                        if holiday.state == 'validate1':
-                            # Second approval: Set deadline to today + X days (e.g., 2 days)
-                            date_deadline = today  # Change this number as needed
-                        else:
-                            # First approval: Use standard calculation based on leave start date
-                            date_deadline = (
-                                (holiday.date_from -
-                                 relativedelta(**{activity_type.delay_unit or 'days': activity_type.delay_count or 0})).date()
-                                if holiday.date_from else today)
-                            if date_deadline < today:
-                                date_deadline = today
-                        
+                        date_deadline = (
+                            (holiday.date_from -
+                             relativedelta(**{activity_type.delay_unit or 'days': activity_type.delay_count or 0})).date()
+                            if holiday.date_from else today)
+                        if date_deadline < today:
+                            date_deadline = today
                         activity_vals.append({
                             'activity_type_id': activity_type.id,
                             'automated': True,
