@@ -78,25 +78,49 @@ class AccruedRevenueWizard(models.TransientModel):
 
     def _get_accrued_revenue_account_id(self):
         """Get accrued revenue account ID with fallback"""
+        # Use user's allowed companies as target companies
+        target_companies = self.env.companies
+        
         try:
             account_id = int(self.env['ir.config_parameter'].sudo().get_param(
                 'account.accrued_revenue_account_id',
                 default='0'
             ) or 0)
-
+            
             if account_id:
-                account = self.env['account.account'].sudo().browse(account_id)
-                if account.exists() and not account.deprecated:
-                    return account_id
-
+                template_account = self.env['account.account'].sudo().browse(account_id)
+                if template_account.exists() and not template_account.deprecated:
+                    # Check if account is accessible by user's allowed companies
+                    if any(company in template_account.company_ids for company in target_companies):
+                        # Account is accessible and valid for at least one target company
+                        return account_id
+                    
+                    # Find the equivalent account in target companies
+                    equivalent_account = self.env['account.account'].sudo().search([
+                        ('code', '=', template_account.code),
+                        ('company_ids', 'in', target_companies.ids),
+                        ('deprecated', '=', False)
+                    ], limit=1)
+                    
+                    if not equivalent_account:
+                        # Fallback: try by name
+                        equivalent_account = self.env['account.account'].sudo().search([
+                            ('name', '=', template_account.name),
+                            ('company_ids', 'in', target_companies.ids),
+                            ('deprecated', '=', False)
+                        ], limit=1)
+                    
+                    if equivalent_account:
+                        return equivalent_account.id
+            
             # Fallback: Find miscellaneous income account
             misc_account = self.env['account.account'].sudo().search([
                 ('account_type', '=', 'income_other'),
                 ('deprecated', '=', False),
-                ('company_id', '=', self.env.company.id)
+                ('company_ids', 'in', target_companies.ids)
             ], limit=1)
-
+            
             return misc_account.id if misc_account else 0
-
+            
         except (ValueError, TypeError):
             return 0

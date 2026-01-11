@@ -209,7 +209,8 @@ class SaleOrder(models.Model):
         #     reversal_date = self.env['saatchi.accrued_revenue']._default_reversal_date()
 
         # Create accrued revenue record
-        accrued_revenue = self.env['saatchi.accrued_revenue'].create({
+        accrued_revenue = self.env['saatchi.accrued_revenue'].with_context(default_company_id=self.company_id.id
+        ).create({
             'x_related_ce_id': self.id,
             'currency_id': self.currency_id.id,
             'date': accrual_date,
@@ -231,84 +232,124 @@ class SaleOrder(models.Model):
     def _create_normal_accrual_lines(self, accrued_revenue):
         """
         Create normal accrual lines from SO lines
-
+        
         Structure:
-        - Credit lines: Revenue accounts (from SO lines)
-        - Debit line: Total Accrued (accrual account)
+        - For positive amounts: Cr. Revenue | Dr. Accrued Revenue
+        - For negative amounts (returns): Dr. Revenue | Cr. Accrued Revenue
         - Creates automatic reversal entry
-
+        
         Args:
             accrued_revenue: The accrued revenue record
-
+            
         Returns:
             int: Accrual record ID if successful, False otherwise
         """
         total_eligible_for_accrue = 0
         lines_created = 0
-
+        
         _logger.info(f"Starting accrual creation for SO {self.name}")
-
+        
+        # Get the target company from accrued_revenue
+        target_company = accrued_revenue.company_id
+        
         for line in self.order_line:
             if line.display_type:
                 continue
-
+            
             if not self._is_agency_charges_category(line.product_template_id):
-                _logger.debug(
-                    f"Skipping line {line.name} - not Agency Charges category")
+                _logger.debug(f"Skipping line {line.name} - not Agency Charges category")
                 continue
-
+            
             accrued_qty = line.product_uom_qty - line.qty_invoiced
-            if accrued_qty <= 0:
-                _logger.debug(
-                    f"Skipping line {line.name} - no accrued qty (qty: {line.product_uom_qty}, invoiced: {line.qty_invoiced})")
+            if accrued_qty == 0:  # Changed from <= to == to allow negative
+                _logger.debug(f"Skipping line {line.name} - no accrued qty (qty: {line.product_uom_qty}, invoiced: {line.qty_invoiced})")
                 continue
-
+            
             accrued_amount = accrued_qty * line.price_unit
-
+            
             # Determine analytic distribution with fallback logic
             analytic_distribution = line.analytic_distribution or {}
-
+            
             # Fallback to SO level analytic distribution
             if not analytic_distribution and hasattr(self, 'analytic_distribution') and self.analytic_distribution:
                 analytic_distribution = self.analytic_distribution
-
+            
             # Default to analytic account ID 2 if still no distribution found
             if not analytic_distribution:
                 analytic_distribution = {2: 100}
-                _logger.debug(
-                    f"Using default analytic account (ID: 2) for line {line.name}")
-
-            income_account = line.product_id.property_account_income_id or \
+                _logger.debug(f"Using default analytic account (ID: 2) for line {line.name}")
+            
+            # Get income account from product
+            template_income_account = line.product_id.property_account_income_id or \
                 line.product_id.categ_id.property_account_income_categ_id
-
-            if not income_account:
-                _logger.warning(
-                    f"No income account found for line {line.name} in SO {self.name}")
+            
+            if not template_income_account:
+                _logger.warning(f"No income account found for line {line.name} in SO {self.name}")
                 continue
-
-            self.env['saatchi.accrued_revenue_lines'].create({
-                'accrued_revenue_id': accrued_revenue.id,
-                'ce_line_id': line.id,
-                'account_id': income_account.id,
-                'label': f'{self.x_ce_code} - {line.name}',
-                'credit': accrued_amount,
-                'debit': 0.0,
-                'currency_id': line.currency_id.id,
-                'analytic_distribution': analytic_distribution,
-            })
-
-            total_eligible_for_accrue += accrued_amount
+            
+            # Find the equivalent account in the target company
+            if target_company in template_income_account.company_ids:
+                # Account is valid for target company
+                income_account = template_income_account
+            else:
+                # Find equivalent account in target company by code or name
+                income_account = self.env['account.account'].sudo().search([
+                    ('name', '=', template_income_account.name),
+                    ('company_ids', 'in', target_company.id),
+                    ('deprecated', '=', False)
+                ], limit=1)
+                
+                if not income_account:
+                    # Fallback: try by name
+                    income_account = self.env['account.account'].sudo().search([
+                        ('name', '=', template_income_account.name),
+                        ('company_ids', 'in', target_company.id),
+                        ('deprecated', '=', False)
+                    ], limit=1)
+                
+                if not income_account:
+                    _logger.warning(
+                        f"No equivalent income account found for line {line.name} in company {target_company.name}. "
+                        f"Template account: {template_income_account.code} - {template_income_account.name}"
+                    )
+                    continue
+            
+            # Handle negative amounts (returns/adjustments)
+            if accrued_amount < 0:
+                # Negative accrual: Dr. Revenue (reverse the credit)
+                self.env['saatchi.accrued_revenue_lines'].create({
+                    'accrued_revenue_id': accrued_revenue.id,
+                    'ce_line_id': line.id,
+                    'account_id': income_account.id,
+                    'label': f'{self.x_ce_code} - {line.name}',
+                    'debit': abs(accrued_amount),  # Debit the revenue account
+                    'credit': 0.0,
+                    'currency_id': line.currency_id.id,
+                    'analytic_distribution': analytic_distribution,
+                })
+            else:
+                # Positive accrual: Cr. Revenue (normal)
+                self.env['saatchi.accrued_revenue_lines'].create({
+                    'accrued_revenue_id': accrued_revenue.id,
+                    'ce_line_id': line.id,
+                    'account_id': income_account.id,
+                    'label': f'{self.x_ce_code} - {line.name}',
+                    'credit': accrued_amount,
+                    'debit': 0.0,
+                    'currency_id': line.currency_id.id,
+                    'analytic_distribution': analytic_distribution,
+                })
+            
+            total_eligible_for_accrue += accrued_amount  # Keep the sign
             lines_created += 1
-            _logger.debug(
-                f"Created line for {line.name}, amount: {accrued_amount}")
-
+            _logger.debug(f"Created line for {line.name}, amount: {accrued_amount}")
+        
         if lines_created == 0:
             accrued_revenue.unlink()
-            _logger.warning(
-                f"No eligible lines found for accrual in SO {self.name}")
+            _logger.warning(f"No eligible lines found for accrual in SO {self.name}")
             return False
-
-        # Create Total Accrued line (debit)
+        
+        # Create Total Accrued line (will be computed by update_total_accrued_line)
         self.env['saatchi.accrued_revenue_lines'].create({
             'accrued_revenue_id': accrued_revenue.id,
             'label': 'Total Accrued',
@@ -317,13 +358,11 @@ class SaleOrder(models.Model):
             'debit': 0.0,
             'credit': 0.0,
         })
-
-        accrued_revenue.write(
-            {'ce_original_total_amount': total_eligible_for_accrue})
-
-        _logger.info(
-            f"✓ Created accrual ID {accrued_revenue.id} for SO {self.name} with {lines_created} lines, total: {total_eligible_for_accrue}")
-
+        
+        accrued_revenue.write({'ce_original_total_amount': total_eligible_for_accrue})
+        
+        _logger.info(f"✓ Created accrual ID {accrued_revenue.id} for SO {self.name} with {lines_created} lines, total: {total_eligible_for_accrue}")
+        
         return accrued_revenue.id
 
     def _create_adjustment_entry_lines(self, accrued_revenue):
