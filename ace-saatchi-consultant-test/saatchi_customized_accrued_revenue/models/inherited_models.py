@@ -575,15 +575,26 @@ class AccountMove(models.Model):
         """Compute linked sale order"""
         for move in self:
             so = False
+            
             # Priority 1: Get from accrued record
             if move.x_related_custom_accrued_record and move.x_related_custom_accrued_record.x_related_ce_id:
                 so = move.x_related_custom_accrued_record.x_related_ce_id
+            
             # Priority 2: Get from invoice lines
             elif move.invoice_line_ids:
+                # Try to get from sale lines first
                 sale_lines = move.invoice_line_ids.mapped('sale_line_ids')
                 if sale_lines:
                     so = sale_lines[0].order_id
-            
+                else:
+                    # Fallback to purchase lines
+                    po_sale_lines = move.invoice_line_ids.mapped('purchase_line_id')
+                    
+                    if po_sale_lines:
+                        # Safely check if x_studio_sales_order exists and has a value
+                        first_po_line = po_sale_lines[0]
+                        if first_po_line.order_id and first_po_line.order_id.x_studio_sales_order:
+                            so = first_po_line.order_id.x_studio_sales_order
             move.x_sales_order = so
 
 

@@ -191,17 +191,17 @@
 
           <!-- From Odoo Studio -->
 
-          <!-- <xpath expr="//form[1]/header[1]/field[@name='state']" position="after">
+          <xpath expr="//form[1]/header[1]/field[@name='state']" position="after">
             <button string="Create Purchase Order" name="783" type="action"/>
           </xpath>
-          <xpath expr="//div[@name='button_box']" position="inside">
+          <!-- <xpath expr="//div[@name='button_box']" position="inside">
             <button class="oe_stat_button" name="studio_customization.purchase_orders_634af5d4-96c8-49e4-a150-98e564727f1b" type="action" icon="fa-credit-card" groups="purchase.group_purchase_user" invisible="x_x_studio_sales_order_purchase_order_count == 0">
                             <div class="o_stat_info">
                                 <span class="o_stat_value"><field name="x_x_studio_sales_order_purchase_order_count" readonly="1"/></span>
                                 <span class="o_stat_text">Purchase</span>
                             </div>
-                        </button>
-          </xpath> -->
+                        </button> -->
+          <!-- </xpath> -->
         </field>
     </record>
 
