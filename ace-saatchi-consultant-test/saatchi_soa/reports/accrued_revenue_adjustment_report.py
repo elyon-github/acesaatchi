@@ -13,32 +13,55 @@ class SalesOrderRevenueXLSX(models.AbstractModel):
     _name = 'report.sales_order_revenue_xlsx'
     _inherit = 'report.report_xlsx.abstract'
     _description = 'Sales Order Revenue XLSX Report'
-
+    
     def _get_accrued_revenue_account_id(self):
-        """Get accrued revenue account ID with fallback"""
+        """Get accrued revenue account IDs with fallback for multiple companies"""
+        # Use user's allowed companies as target companies
+        target_companies = self.env.companies
         try:
             account_id = int(self.env['ir.config_parameter'].sudo().get_param(
                 'account.accrued_revenue_account_id',
                 default='0'
             ) or 0)
-
+            
             if account_id:
-                account = self.env['account.account'].sudo().browse(account_id)
-                if account.exists() and not account.deprecated:
-                    return account_id
-
-            # Fallback: Find miscellaneous income account
-            misc_account = self.env['account.account'].sudo().search([
+                template_account = self.env['account.account'].sudo().browse(account_id)
+                if template_account.exists() and not template_account.deprecated:
+                    # Check if account is accessible by user's allowed companies
+                    if any(company in template_account.company_ids for company in target_companies):
+                        # Account is accessible and valid for at least one target company
+                        return template_account.ids
+                    
+                    # Find the equivalent accounts in target companies
+                    equivalent_accounts = self.env['account.account'].sudo().search([
+                        ('name', '=', template_account.name),
+                        ('company_ids', 'in', target_companies.ids),
+                        ('deprecated', '=', False)
+                    ])
+                    
+                    if not equivalent_accounts:
+                        # Fallback: try by name
+                        equivalent_accounts = self.env['account.account'].sudo().search([
+                            ('name', '=', template_account.name),
+                            ('company_ids', 'in', target_companies.ids),
+                            ('deprecated', '=', False)
+                        ])
+                    
+                    if equivalent_accounts:
+                        return equivalent_accounts.ids
+            
+            # Fallback: Find miscellaneous income accounts
+            misc_accounts = self.env['account.account'].sudo().search([
                 ('account_type', '=', 'income_other'),
                 ('deprecated', '=', False),
-                ('company_id', '=', self.env.company.id)
-            ], limit=1)
-
-            return misc_account.id if misc_account else 0
-
+                ('company_ids', 'in', target_companies.ids)
+            ])
+            
+            return misc_accounts.ids if misc_accounts else []
+            
         except (ValueError, TypeError):
-            return 0
-
+            return []
+            
     def _define_formats(self, workbook):
         """Define and return format objects."""
         base_font = {'font_name': 'Calibri', 'font_size': 10}
@@ -408,7 +431,7 @@ class SalesOrderRevenueXLSX(models.AbstractModel):
 
         # Write report header
         row = 0
-        sheet.write(row, 0, 'ACE SAATCHI AND SAATCHI ADVERTISING INC', formats['title'])
+        sheet.write(row, 0, self.env.company.name, formats['title'])
         row += 1
         sheet.write(row, 0, f'REVENUE REPORT SUMMARY - {month_full}', formats['title'])
         row += 1
@@ -593,7 +616,7 @@ class SalesOrderRevenueXLSX(models.AbstractModel):
 
         # Write report header
         row = 0
-        sheet.write(row, 0, 'ACE SAATCHI AND SAATCHI ADVERTISING INC', formats['title'])
+        sheet.write(row, 0, self.env.company.name, formats['title'])
         row += 1
         sheet.write(row, 0, f'REVENUE REPORT - {month_full}', formats['title'])
         row += 1
