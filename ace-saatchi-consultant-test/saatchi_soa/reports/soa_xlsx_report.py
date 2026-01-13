@@ -182,39 +182,36 @@ class SaatchiXLSX(models.AbstractModel):
             'border': 1
         })
 
-    def generate_header(self, sheet, customer_name, report_date, formats):
-        """Generate report header with customer name."""
-        sheet.write(0, 0, customer_name, formats['company'])
+    def generate_header(self, sheet, company_name, report_date, formats):
+        """Generate report header with company name."""
+        sheet.write(0, 0, company_name, formats['company'])
         sheet.write(1, 0, 'Statement of Account', formats['title'])
         sheet.write(2, 0, report_date, formats['report_date'])
 
-    def generate_table_header(self, sheet, row, aging_months, currency_code, formats):
+    def generate_table_header(self, sheet, row, aging_months, currency_code, partner_name, formats):
         """Generate table column headers with dynamic months."""
         # Currency label row
         sheet.write(row, 0, f'CURRENCY: {currency_code}', formats['top_label'])
-        for i in range(1, 6 + len(aging_months)):  # Changed from 7 to 6
+        for i in range(1, 6 + len(aging_months)):
             sheet.write(row, i, '', formats['top_label'])
 
-        # Row 1: Client and METROBANK labels (no black background)
+        # Row 1: Client label with partner name
         row += 1
         sheet.write(row, 0, '', formats['top_label'])
         sheet.write(row, 1, 'Client', formats['top_label'])
-        # REMOVED column index 2
-        sheet.write(row, 2, 'METROBANK', formats['top_label'])
+        sheet.write(row, 2, partner_name, formats['top_label'])
         sheet.write(row, 3, '', formats['top_label'])
         sheet.write(row, 4, '', formats['top_label'])
         sheet.write(row, 5, '', formats['top_label'])
 
         # Month headers
         for i, month in enumerate(aging_months):
-            # Changed from 7 to 6
             sheet.write(row, 6 + i, '', formats['top_label'])
 
         # Row 2: Actual column headers (with black background)
         row += 1
         sheet.write(row, 0, 'PO#', formats['black_header'])
         sheet.write(row, 1, 'CE#', formats['black_header'])
-        # REMOVED column index 2
         sheet.write(row, 2, 'Project Title', formats['black_header'])
         sheet.write(row, 3, 'Invoice #', formats['black_header'])
         sheet.write(row, 4, 'Date', formats['black_header'])
@@ -222,7 +219,6 @@ class SaatchiXLSX(models.AbstractModel):
 
         # Dynamic month columns
         for i, month in enumerate(aging_months):
-            # Changed from 7 to 6
             sheet.write(row, 6 + i, month['label'], formats['black_header'])
 
         sheet.set_row(row - 2, 18)
@@ -234,7 +230,6 @@ class SaatchiXLSX(models.AbstractModel):
     def generate_summary(self, sheet, row, totals, aging_months, currency_code, formats):
         """Generate summary totals."""
         sheet.write(row, 0, f'TOTAL {currency_code}', formats['total'])
-        # REMOVED column index 2
         sheet.write(row, 1, '', formats['total'])
         sheet.write(row, 2, '', formats['total'])
         sheet.write(row, 3, '', formats['total'])
@@ -243,9 +238,7 @@ class SaatchiXLSX(models.AbstractModel):
 
         # Dynamic month totals
         for i in range(len(aging_months)):
-            # Changed from 7 to 6
-            sheet.write(row, 6 + i, totals['months']
-                        [i], formats['total_currency'])
+            sheet.write(row, 6 + i, totals['months'][i], formats['total_currency'])
 
         sheet.set_row(row, 18)
 
@@ -286,14 +279,21 @@ class SaatchiXLSX(models.AbstractModel):
             # Set column widths - wider to fill screen at 100% zoom
             sheet.set_column(0, 0, 22)   # PO#
             sheet.set_column(1, 1, 16)   # CE#
-            # REMOVED column 2
             sheet.set_column(2, 2, 50)   # Project Title
             sheet.set_column(3, 3, 20)   # Invoice #
             sheet.set_column(4, 4, 16)   # Date
             sheet.set_column(5, 5, 18)   # Total
 
-            # Generate header with CUSTOMER NAME instead of company name
-            self.generate_header(sheet, partner_name, report_date, formats)
+            # Get company name from the first move's company
+            company_name = 'Unknown Company'
+            if currencies:
+                first_currency_data = next(iter(currencies.values()))
+                if first_currency_data['moves']:
+                    first_move = first_currency_data['moves'][0]
+                    company_name = first_move.company_id.name or 'Unknown Company'
+
+            # Generate header with COMPANY NAME instead of customer name
+            self.generate_header(sheet, company_name, report_date, formats)
 
             # Starting row for tables
             current_row = 3
@@ -328,9 +328,9 @@ class SaatchiXLSX(models.AbstractModel):
                 total_currency_format = self._create_total_currency_format(
                     workbook, currency_symbol, base_font)
 
-                # Generate table header
+                # Generate table header with partner name
                 header_end_row = self.generate_table_header(
-                    sheet, current_row, aging_months, currency_code, formats)
+                    sheet, current_row, aging_months, currency_code, partner_name, formats)
 
                 # Sort moves by due date
                 moves_sorted = sorted(
@@ -346,13 +346,13 @@ class SaatchiXLSX(models.AbstractModel):
                 row = header_end_row + 1
 
                 for move in moves_sorted:
+                    # Accept both positive and negative amounts
                     amount = move.amount_residual if move.move_type == 'out_invoice' else -move.amount_residual
                     totals['total'] += amount
 
                     # Determine which month bucket this invoice belongs to based on due date
                     due_date = move.invoice_date_due or move.invoice_date or move.date
-                    bucket_index = self._get_month_bucket(
-                        due_date, aging_months)
+                    bucket_index = self._get_month_bucket(due_date, aging_months)
 
                     if bucket_index is not None:
                         totals['months'][bucket_index] += amount
@@ -361,40 +361,33 @@ class SaatchiXLSX(models.AbstractModel):
                     inv_date = move.invoice_date or move.date
 
                     # Get sale order for CE# and Job Description
-                    sale_order = move.invoice_line_ids.mapped('sale_line_ids.order_id')[
-                        :1] if move.invoice_line_ids else False
+                    sale_order = move.invoice_line_ids.mapped('sale_line_ids.order_id')[:1] if move.invoice_line_ids else False
 
-                    # Write row data - ADJUSTED column indices
-                    sheet.write(row, 0, move.ref or '',
-                                formats['normal'])  # PO#
-                    sheet.write(
-                        # CE#
-                        row, 1, sale_order.x_ce_code or '' if sale_order else '', formats['centered'])
-                    # REMOVED column index 2
-                    sheet.write(row, 2, sale_order.x_job_description or '',
-                                formats['centered'])  # Project Title
-                    sheet.write(row, 3, move.name or '',
-                                formats['centered'])  # Invoice #
+                    # Get CE# with fallback to x_studio_old_ce_1
+                    ce_code = ''
+                    # if sale_order:
+                    ce_code = sale_order.x_ce_code or move.x_studio_old_ce_1 or ''
+                    
+                    # Write row data
+                    sheet.write(row, 0, move.ref or '', formats['normal'])  # PO#
+                    sheet.write(row, 1, ce_code, formats['centered'])  # CE#
+                    sheet.write(row, 2, sale_order.x_job_description or '' if sale_order else '', formats['centered'])  # Project Title
+                    sheet.write(row, 3, move.name or '', formats['centered'])  # Invoice #
                     sheet.write(row, 4, inv_date, formats['date'])  # Date
-                    # Total with currency
-                    sheet.write(row, 5, amount, currency_format)
+                    sheet.write(row, 5, amount, currency_format)  # Total with currency
 
                     # Month columns - only populate the matching bucket
                     for i in range(len(aging_months)):
                         if i == bucket_index:
-                            # Changed from 7 to 6
                             sheet.write(row, 6 + i, amount, currency_format)
                         else:
-                            # Changed from 7 to 6
-                            sheet.write(row, 6 + i, '-',
-                                        formats['right_aligned'])
+                            sheet.write(row, 6 + i, '-', formats['right_aligned'])
 
                     sheet.set_row(row, 20)
                     row += 1
 
                 # Generate summary with currency-specific format
-                formats_with_currency = {
-                    **formats, 'total_currency': total_currency_format}
+                formats_with_currency = {**formats, 'total_currency': total_currency_format}
                 current_row = self.generate_summary(
                     sheet, row, totals, aging_months, currency_code, formats_with_currency)
 
