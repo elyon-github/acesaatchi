@@ -21,6 +21,17 @@
         <field name="binding_model_id" ref="account.model_account_move_line"/>
         <field name="binding_type">report</field>
     </record> -->
+    
+    <!-- Aged Receivables Report -->
+    <record id="action_report_aged_receivables_xlsx" model="ir.actions.report">
+        <field name="name">Aged Receivables (XLSX)</field>
+        <field name="model">account.move</field>
+        <field name="report_type">xlsx</field>
+        <field name="report_name">aged_receivables_xlsx</field>
+        <field name="report_file">aged_receivables_xlsx</field>
+        <field name="binding_model_id" ref="account.model_account_move"/>
+        <field name="binding_type">report</field>
+    </record>
 
 
     <record id="action_report_accrued_revenue_xlsx" model="ir.actions.report">
