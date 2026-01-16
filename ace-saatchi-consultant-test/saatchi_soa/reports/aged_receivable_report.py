@@ -70,13 +70,35 @@ class AgedReceivablesXLSX(models.AbstractModel):
             'border': 1
         })
 
+        # Grand total row format (lime green background, bold)
+        grand_total_format = workbook.add_format({
+            **base_font,
+            'bold': True,
+            'align': 'right',
+            'valign': 'vcenter',
+            'bg_color': '#CCFF66',  # Lime green
+            'border': 1
+        })
+
+        # Grand total label format
+        grand_total_label_format = workbook.add_format({
+            **base_font,
+            'bold': True,
+            'align': 'left',
+            'valign': 'vcenter',
+            'bg_color': '#CCFF66',  # Lime green
+            'border': 1
+        })
+
         return {
             'yellow_header': yellow_header_format,
             'normal': normal_format,
             'centered': centered_format,
             'right_aligned': right_aligned_format,
             'date': date_format,
-            'subtotal': subtotal_format
+            'subtotal': subtotal_format,
+            'grand_total': grand_total_format,
+            'grand_total_label': grand_total_label_format
         }
 
     def _get_aging_bucket(self, invoice_date, reference_date):
@@ -96,6 +118,21 @@ class AgedReceivablesXLSX(models.AbstractModel):
             return 3  # 91-120
         else:
             return 4  # OVER 120
+
+    def _convert_to_php(self, amount, from_currency, to_currency, date):
+        """Convert amount from one currency to another (typically USD to PHP)."""
+        if from_currency == to_currency:
+            return amount
+        
+        # Use Odoo's currency conversion with the invoice date
+        company = self.env.company
+        converted_amount = from_currency._convert(
+            amount, 
+            to_currency, 
+            company, 
+            date
+        )
+        return converted_amount
 
     def _create_currency_format(self, workbook, currency_symbol, base_font):
         """Create currency format with symbol."""
@@ -117,6 +154,18 @@ class AgedReceivablesXLSX(models.AbstractModel):
             'border': 1
         })
 
+    def _create_grand_total_currency_format(self, workbook, currency_symbol, base_font):
+        """Create grand total currency format with lime green background."""
+        return workbook.add_format({
+            **base_font,
+            'bold': True,
+            'num_format': f'{currency_symbol}#,##0.00',
+            'align': 'right',
+            'valign': 'vcenter',
+            'bg_color': '#CCFF66',  # Lime green
+            'border': 1
+        })
+
     def generate_xlsx_report(self, workbook, data, lines):
         """Main report generation method."""
         formats = self._define_formats(workbook)
@@ -124,6 +173,11 @@ class AgedReceivablesXLSX(models.AbstractModel):
 
         # Get reference date (today)
         reference_date = datetime.date.today()
+
+        # Get PHP currency for grand total conversion
+        php_currency = self.env['res.currency'].search([('name', '=', 'PHP')], limit=1)
+        if not php_currency:
+            php_currency = self.env.company.currency_id  # Fallback to company currency
 
         # Group invoices by partner and currency
         by_partner = {}
@@ -181,6 +235,12 @@ class AgedReceivablesXLSX(models.AbstractModel):
         # Sort partners alphabetically
         sorted_partners = sorted(by_partner.items())
 
+        # Initialize grand totals across all clients/currencies (in PHP)
+        grand_totals = {
+            'total': 0,
+            'buckets': [0, 0, 0, 0, 0]
+        }
+
         # Process each partner
         for partner_name, currencies in sorted_partners:
             # Process each currency for this partner
@@ -212,13 +272,18 @@ class AgedReceivablesXLSX(models.AbstractModel):
                     # Accept both positive and negative amounts
                     amount = move.amount_residual if move.move_type == 'out_invoice' else -move.amount_residual
                     subtotals['total'] += amount
+                    
+                    # Convert to PHP for grand total
+                    inv_date = move.invoice_date or move.date or reference_date
+                    amount_php = self._convert_to_php(amount, currency, php_currency, inv_date)
+                    grand_totals['total'] += amount_php
 
                     # Determine aging bucket based on invoice date
-                    inv_date = move.invoice_date or move.date
                     bucket_index = self._get_aging_bucket(inv_date, reference_date)
 
                     if bucket_index is not None:
                         subtotals['buckets'][bucket_index] += amount
+                        grand_totals['buckets'][bucket_index] += amount_php  # Add PHP converted amount
 
                     # Get sale order for CE# and other fields
                     sale_order = move.invoice_line_ids.mapped('sale_line_ids.order_id')[:1] if move.invoice_line_ids else False
@@ -261,5 +326,29 @@ class AgedReceivablesXLSX(models.AbstractModel):
 
                 sheet.set_row(row, 18)
                 row += 1
+
+        # GRAND TOTAL ROW - NOW OUTSIDE ALL LOOPS
+        _logger.info(f"Writing grand total at row: {row}")
+        _logger.info(f"Grand totals: {grand_totals}")
+        
+        # Write GRAND TOTAL row at the bottom (always in PHP)
+        php_symbol = php_currency.symbol if php_currency else '₱'
+        
+        grand_total_currency_format = self._create_grand_total_currency_format(
+            workbook, php_symbol, base_font)
+        
+        sheet.write(row, 0, 'Total Aged Receivable', formats['grand_total_label'])
+        sheet.write(row, 1, '', formats['grand_total'])
+        sheet.write(row, 2, '', formats['grand_total'])
+        sheet.write(row, 3, '', formats['grand_total'])
+        sheet.write(row, 4, '', formats['grand_total'])
+        sheet.write(row, 5, grand_totals['total'], grand_total_currency_format)
+
+        for i in range(5):
+            sheet.write(row, 6 + i, grand_totals['buckets'][i], grand_total_currency_format)
+
+        sheet.set_row(row, 20)
+        
+        _logger.info(f"Grand total row completed at row: {row}")
 
         return True
