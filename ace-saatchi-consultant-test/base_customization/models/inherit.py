@@ -4,6 +4,11 @@ from odoo.exceptions import UserError, ValidationError
 from dateutil.relativedelta import relativedelta
 from odoo import models, _
 from datetime import timedelta
+from odoo import models, api
+from lxml import html
+import re
+
+
 class InheritUsers(models.Model):
     _inherit = 'res.users'
 
@@ -561,7 +566,100 @@ class AccountMove(models.Model):
         compute="_compute_x_alt_currency_id",
         string="Alt Currency"
     )
-
+    
+    def get_parsed_table_notes(self):
+        """Parse x_studio_table_note HTML to extract tables by line number
+        
+        Detects variants: Line-1, Line 1, line-1, LINE 1, etc.
+        Converts to 0-based indexing (Line 1 → sequence 0)
+        Tables without line markers are stored as 'default' and render at end
+        
+        Returns:
+            dict: {'0': '<table>...</table>', '1': '<table>...</table>', 'default': '<table>...</table>'}
+        """
+        if not self.x_studio_table_note:
+            return {}
+        
+        result = {}
+        
+        try:
+            content = self.x_studio_table_note
+            pattern = r'(?i)line\s*[-\s]*(\d+)'
+            matches = list(re.finditer(pattern, content))
+            
+            if matches:
+                # Process tables with line markers
+                for i, match in enumerate(matches):
+                    line_num_raw = int(match.group(1))
+                    line_num = str(line_num_raw - 1)
+                    start_pos = match.end()
+                    
+                    if i + 1 < len(matches):
+                        end_pos = matches[i + 1].start()
+                    else:
+                        end_pos = len(content)
+                    
+                    section_content = content[start_pos:end_pos].strip()
+                    
+                    if section_content:
+                        try:
+                            doc = html.fromstring(f'<div>{section_content}</div>')
+                            tables = doc.xpath('.//table')
+                            
+                            if tables:
+                                table = tables[0]
+                                
+                                for cell in table.xpath('.//td | .//th'):
+                                    existing_style = cell.get('style', '')
+                                    if 'border' not in existing_style.lower():
+                                        new_style = existing_style + '; border: 1px solid white;' if existing_style else 'border: 1px solid white;'
+                                        cell.set('style', new_style)
+                                
+                                table_html = html.tostring(table, encoding='unicode')
+                                result[line_num] = table_html
+                        except Exception as parse_error:
+                            if '<table' in section_content and '</table>' in section_content:
+                                table_start = section_content.find('<table')
+                                table_end = section_content.find('</table>') + 8
+                                if table_start != -1 and table_end > table_start:
+                                    table_html = section_content[table_start:table_end]
+                                    result[line_num] = table_html
+                
+                # Check if there's content before first marker (unmarked table)
+                first_match_pos = matches[0].start()
+                if first_match_pos > 0:
+                    content_before = content[:first_match_pos].strip()
+                    if '<table' in content_before:
+                        result['default'] = content_before
+            else:
+                # No line markers found - entire content is default table
+                if '<table' in content:
+                    try:
+                        doc = html.fromstring(f'<div>{content}</div>')
+                        tables = doc.xpath('.//table')
+                        
+                        if tables:
+                            table = tables[0]
+                            
+                            for cell in table.xpath('.//td | .//th'):
+                                existing_style = cell.get('style', '')
+                                if 'border' not in existing_style.lower():
+                                    new_style = existing_style + '; border: 1px solid white;' if existing_style else 'border: 1px solid white;'
+                                    cell.set('style', new_style)
+                            
+                            table_html = html.tostring(table, encoding='unicode')
+                            result['default'] = table_html
+                    except:
+                        result['default'] = content
+            
+            return result
+            
+        except Exception as e:
+            import logging
+            _logger = logging.getLogger(__name__)
+            _logger.error(f"Error parsing table notes: {str(e)}")
+            return {}
+            
     @api.model
     def create(self, vals):
         record = super().create(vals)
