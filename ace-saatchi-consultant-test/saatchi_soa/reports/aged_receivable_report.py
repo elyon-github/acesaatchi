@@ -4,9 +4,6 @@ from xlsxwriter.workbook import Workbook
 from odoo.exceptions import ValidationError, UserError
 from dateutil.relativedelta import relativedelta
 import pytz
-import logging
-
-_logger = logging.getLogger(__name__)
 
 
 class AgedReceivablesXLSX(models.AbstractModel):
@@ -70,13 +67,32 @@ class AgedReceivablesXLSX(models.AbstractModel):
             'border': 1
         })
 
-        # Grand total row format (lime green background, bold)
+        # Subtotal label format (lighter green background, bold, left-aligned)
+        subtotal_label_format = workbook.add_format({
+            **base_font,
+            'bold': True,
+            'align': 'left',
+            'valign': 'vcenter',
+            'bg_color': '#CCFF66',  # Lighter green
+            'border': 1
+        })
+
+        # Subtotal cell format (lighter green background)
+        subtotal_cell_format = workbook.add_format({
+            **base_font,
+            'align': 'right',
+            'valign': 'vcenter',
+            'bg_color': '#CCFF66',  # Lighter green
+            'border': 1
+        })
+
+        # Grand total row format (darker green background, bold)
         grand_total_format = workbook.add_format({
             **base_font,
             'bold': True,
             'align': 'right',
             'valign': 'vcenter',
-            'bg_color': '#CCFF66',  # Lime green
+            'bg_color': '#99CC33',  # Darker green
             'border': 1
         })
 
@@ -86,7 +102,7 @@ class AgedReceivablesXLSX(models.AbstractModel):
             'bold': True,
             'align': 'left',
             'valign': 'vcenter',
-            'bg_color': '#CCFF66',  # Lime green
+            'bg_color': '#99CC33',  # Darker green
             'border': 1
         })
 
@@ -97,6 +113,8 @@ class AgedReceivablesXLSX(models.AbstractModel):
             'right_aligned': right_aligned_format,
             'date': date_format,
             'subtotal': subtotal_format,
+            'subtotal_label': subtotal_label_format,
+            'subtotal_cell': subtotal_cell_format,
             'grand_total': grand_total_format,
             'grand_total_label': grand_total_label_format
         }
@@ -106,9 +124,18 @@ class AgedReceivablesXLSX(models.AbstractModel):
         if not invoice_date:
             return None
         
+        # Ensure we're working with date objects, not datetime
+        if isinstance(invoice_date, datetime.datetime):
+            invoice_date = invoice_date.date()
+        if isinstance(reference_date, datetime.datetime):
+            reference_date = reference_date.date()
+        
         days_old = (reference_date - invoice_date).days
         
-        if days_old <= 30:
+        # If not yet due (negative days_old), put in 0-30 bucket
+        if days_old <= 0:
+            return 0  # Not yet due - goes to 0-30
+        elif days_old <= 30:
             return 0  # 0-30
         elif days_old <= 60:
             return 1  # 31-60
@@ -145,24 +172,25 @@ class AgedReceivablesXLSX(models.AbstractModel):
         })
 
     def _create_subtotal_currency_format(self, workbook, currency_symbol, base_font):
-        """Create subtotal currency format."""
+        """Create subtotal currency format with lighter green background."""
         return workbook.add_format({
             **base_font,
             'num_format': f'{currency_symbol}#,##0.00',
             'align': 'right',
             'valign': 'vcenter',
+            'bg_color': '#CCFF66',  # Lighter green
             'border': 1
         })
 
     def _create_grand_total_currency_format(self, workbook, currency_symbol, base_font):
-        """Create grand total currency format with lime green background."""
+        """Create grand total currency format with darker green background."""
         return workbook.add_format({
             **base_font,
             'bold': True,
             'num_format': f'{currency_symbol}#,##0.00',
             'align': 'right',
             'valign': 'vcenter',
-            'bg_color': '#CCFF66',  # Lime green
+            'bg_color': '#99CC33',  # Darker green
             'border': 1
         })
 
@@ -183,7 +211,7 @@ class AgedReceivablesXLSX(models.AbstractModel):
         by_partner = {}
 
         for move in lines:
-            if move.move_type in ['out_invoice', 'out_refund'] and move.state == 'posted':
+            if move.move_type in ['out_invoice', 'out_refund'] and move.state == 'posted' and move.amount_residual != 0:
                 partner_name = move.partner_id.name or 'Unknown'
                 currency = move.currency_id
                 currency_key = f"{currency.name}_{currency.id}" if currency else 'NO_CURRENCY'
@@ -273,13 +301,18 @@ class AgedReceivablesXLSX(models.AbstractModel):
                     amount = move.amount_residual if move.move_type == 'out_invoice' else -move.amount_residual
                     subtotals['total'] += amount
                     
-                    # Convert to PHP for grand total
+                    # Use invoice date for currency conversion and display
                     inv_date = move.invoice_date or move.date or reference_date
+                    
+                    # Use due date for aging calculation
+                    due_date = move.invoice_date_due or inv_date
+                    
+                    # Convert to PHP for grand total
                     amount_php = self._convert_to_php(amount, currency, php_currency, inv_date)
                     grand_totals['total'] += amount_php
 
-                    # Determine aging bucket based on invoice date
-                    bucket_index = self._get_aging_bucket(inv_date, reference_date)
+                    # Determine aging bucket based on DUE date
+                    bucket_index = self._get_aging_bucket(due_date, reference_date)
 
                     if bucket_index is not None:
                         subtotals['buckets'][bucket_index] += amount
@@ -313,12 +346,9 @@ class AgedReceivablesXLSX(models.AbstractModel):
                     sheet.set_row(row, 18)
                     row += 1
 
-                # Write subtotal row for this client/currency
-                sheet.write(row, 0, '', formats['subtotal'])
-                sheet.write(row, 1, '', formats['subtotal'])
-                sheet.write(row, 2, '', formats['subtotal'])
-                sheet.write(row, 3, '', formats['subtotal'])
-                sheet.write(row, 4, '', formats['subtotal'])
+                # Write subtotal row for this client/currency with darker green background
+                # Merge cells from column 0 to 4 for the label
+                sheet.merge_range(row, 0, row, 4, f'Total | {partner_name}', formats['subtotal_label'])
                 sheet.write(row, 5, subtotals['total'], subtotal_currency_format)
 
                 for i in range(5):
@@ -328,9 +358,6 @@ class AgedReceivablesXLSX(models.AbstractModel):
                 row += 1
 
         # GRAND TOTAL ROW - NOW OUTSIDE ALL LOOPS
-        _logger.info(f"Writing grand total at row: {row}")
-        _logger.info(f"Grand totals: {grand_totals}")
-        
         # Write GRAND TOTAL row at the bottom (always in PHP)
         php_symbol = php_currency.symbol if php_currency else '₱'
         
@@ -348,7 +375,5 @@ class AgedReceivablesXLSX(models.AbstractModel):
             sheet.write(row, 6 + i, grand_totals['buckets'][i], grand_total_currency_format)
 
         sheet.set_row(row, 20)
-        
-        _logger.info(f"Grand total row completed at row: {row}")
 
         return True
