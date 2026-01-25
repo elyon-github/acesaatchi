@@ -164,6 +164,43 @@
 									</div>
 								</div>
 							</t>
+							<!-- TOTALS ROW -->
+							<t t-set="total_m1" t-value="sum([val['m1'] for val in processed])"/>
+							<t t-set="total_m2" t-value="sum([val['m2'] for val in processed])"/>
+							<t t-set="total_m3" t-value="sum([val['m3'] for val in processed])"/>
+							<t t-set="total_m_total" t-value="sum([val['m_total'] for val in processed])"/>
+							<t t-set="total_taxed" t-value="sum([val['taxed'] for val in processed])"/>
+							<div t-attf-style="position: absolute; top: #{56 + offset_top}mm; left: #{5 + offset_left}mm; width: 262mm; font-size: 10pt; line-height: 1.4;">
+								<div style="display: table; margin-bottom: 2.5mm;  padding-top: 2px; font-weight: bold;">
+									<!-- Nature of Income Payment -->
+									<div style="display: table-cell; width: 67mm; text-align: left; padding-left: 1.5mm; vertical-align: middle;">
+										<!-- TOTAL -->
+									</div>
+									<!-- ATC -->
+									<div style="display: table-cell; width: 20mm; text-align: center; vertical-align: middle;">
+									</div>
+									<!-- 1st Month Total -->
+									<div style="display: table-cell; width: 32mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+										<t t-esc='"{:,.2f}".format(total_m1)'/>
+									</div>
+									<!-- 2nd Month Total -->
+									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+										<t t-esc='"{:,.2f}".format(total_m2)'/>
+									</div>
+									<!-- 3rd Month Total -->
+									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+										<t t-esc='"{:,.2f}".format(total_m3)'/>
+									</div>
+									<!-- Grand Total -->
+									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+										<t t-esc='"{:,.2f}".format(total_m_total)'/>
+									</div>
+									<!-- Tax Withheld Total -->
+									<div style="display: table-cell; width: 36mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+										<t t-esc='"{:,.2f}".format(total_taxed)'/>
+									</div>
+								</div>
+							</div>
 						</div>
 					</t>
 				</div>
