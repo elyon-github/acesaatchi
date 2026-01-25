@@ -445,12 +445,12 @@ export function construct_ammendment_no_action(data) {
     "<table class='table table-striped table-hover dt-responsive nowrap bir-data-table' id='bir_ammend_table' role='table'><thead><tr>";
 
   html +=
-    "<th scope='col'>ID</th>\
-        <th scope='col'>Name</th>\
+    "<th scope='col'>Name</th>\
         <th scope='col'>Type</th>\
         <th scope='col'>Bill Date</th>\
         <th scope='col'>Due Date</th>\
         <th scope='col'>Payment Status</th>\
+        <th scope='col' class='text-right'>Untaxed Amount</th>\
         <th scope='col' class='text-right'>Total Amount</th>\
         </tr></thead><tbody>";
 
@@ -462,9 +462,9 @@ export function construct_ammendment_no_action(data) {
       badgeClass = "bir-badge-success";
     }
     
-    let billDate = data[y][4] || "-";
-    let dueDate = data[y][5] || "-";
-    let paymentStatus = data[y][6] || "Unpaid";
+    let billDate = data[y][5] || "-";
+    let dueDate = data[y][6] || "-";
+    let paymentStatus = data[y][7] || "Unpaid";
     
     // Format dates if they exist
     if (billDate !== "-" && billDate) {
@@ -484,9 +484,6 @@ export function construct_ammendment_no_action(data) {
     
     html +=
       "<tr>\
-            <td class='fw-bold'>" +
-      data[y][0] +
-      "</td>\
             <td>" +
       data[y][1] +
       "</td>\
@@ -506,6 +503,9 @@ export function construct_ammendment_no_action(data) {
       "</span></td>\
             <td class='text-right'>" +
       numberWithCommas(data[y][3]) +
+      "</td>\
+            <td class='text-right'>" +
+      numberWithCommas(data[y][4]) +
       "</td></tr>";
   }
 

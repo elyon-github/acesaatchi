@@ -48,19 +48,19 @@
 				<div style="background-image: url('/bir_module/static/img/2307.jpg'); background-repeat: no-repeat; background-size: 262mm 392mm; width: 262mm; height: 392mm; position: absolute; top: 0; left: 0;">
 					
 					<!-- Part I - For the Period -->
-					<t t-set="period" t-value="env['account.move'].fetch_period_dates(month)"/>
+					<t t-set="period" t-value="env['account.move'].fetch_period_dates(month) if month else []"/>
 					
 					<!-- From: Month Day Year -->
 					<div class="left" t-attf-style="position: absolute;  top: #{39 + offset_top}mm; left: #{68 + offset_left}mm;letter-spacing:11px; font-size:11pt;">
-						<span><t t-esc="period[1]"/></span>
+						<span><t t-esc="period[1] if len(period) > 1 else ''"/></span>
 						<span style="margin-left: 4px">01</span>
-						<span style="margin-left: 4px"><t t-esc="period[5]"/></span>
+						<span style="margin-left: 4px"><t t-esc="period[5] if len(period) > 5 else ''"/></span>
 					</div>
 					<!-- To: Month Day Year -->
 					<div class="right" t-attf-style="position: absolute;  top: #{39 + offset_top}mm; left: #{179 + offset_left}mm; letter-spacing:11px; font-size:11pt;">
-						<span><t t-esc="period[2]"/></span>
-						<span style="margin-left: 4px"><t t-esc="period[4]"/></span>
-						<span style="margin-left: 4px"><t t-esc="period[5]"/></span>
+						<span><t t-esc="period[2] if len(period) > 2 else ''"/></span>
+						<span style="margin-left: 4px"><t t-esc="period[4] if len(period) > 4 else ''"/></span>
+						<span style="margin-left: 4px"><t t-esc="period[5] if len(period) > 5 else ''"/></span>
 					</div>
 					
 
@@ -135,11 +135,11 @@
 							<t t-foreach="processed" t-as="val">
 								<div style="display: table; margin-bottom: 2.5mm;">
 									<!-- Nature of Income Payment -->
-									<div style="display: table-cell; width: 67mm; text-align: left; padding-left: 1.5mm; vertical-align: middle; border: 1px solid red">
+									<div style="display: table-cell; width: 67mm; text-align: left; padding-left: 1.5mm; vertical-align: middle;">
 										<t t-esc='val["desc"]["en_US"]'/>
 									</div>
 									<!-- ATC -->
-									<div style="display: table-cell; width: 20mm; text-align: center; vertical-align: middle; border: 1px solid red">
+									<div style="display: table-cell; width: 20mm; text-align: center; vertical-align: middle;">
 										<t t-esc='val["code"]'/>
 									</div>
 									<!-- 1st Month -->
