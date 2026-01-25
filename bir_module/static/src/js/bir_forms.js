@@ -24,6 +24,7 @@ export class Form2307 extends Component {
       selectedPartner: 0,
       partnersList: [],
       filteredPartners: [],
+      searchTerm: "",
     });
 
     onMounted(async () => {
@@ -101,16 +102,26 @@ export class Form2307 extends Component {
     const partnerName = option.dataset.name;
 
     this.state.selectedPartner = partnerId;
+    this.state.searchTerm = ""; // Clear search when partner changes
     
     const input = this.rootRef.el.querySelector("#partner_2307");
     const idField = this.rootRef.el.querySelector("#partner_2307_id");
+    const searchInput = this.rootRef.el.querySelector("#search_2307");
     
     input.value = partnerName;
     idField.value = partnerId;
+    if (searchInput) {
+      searchInput.value = "";
+    }
 
     const dropdown = this.rootRef.el.querySelector("#partner_2307_dropdown");
     dropdown.classList.remove("active");
 
+    this.loadData();
+  }
+
+  onSearchChange(ev) {
+    this.state.searchTerm = ev.target.value;
     this.loadData();
   }
 
@@ -127,15 +138,21 @@ export class Form2307 extends Component {
     const monthInput = this.rootRef.el.querySelector("#month_2307");
     const current = monthInput ? monthInput.value : this.state.currentMonth;
     const BP = this.state.selectedPartner;
+    const search = this.state.searchTerm || "";
 
     const data = await this.orm.call("account.move", "x_2307_forms", [
       "",
-      { month: current, id: BP, trigger: "print", tranid: "none" },
+      { month: current, id: BP, trigger: "print", tranid: "none", search: search },
     ]);
     this.action.doAction(data);
   }
 
   onMonthChange(ev) {
+    this.state.searchTerm = ""; // Clear search when month changes
+    const searchInput = this.rootRef.el.querySelector("#search_2307");
+    if (searchInput) {
+      searchInput.value = "";
+    }
     this.loadData();
   }
 
@@ -149,12 +166,15 @@ export class Form2307 extends Component {
     }
     
     const BP = this.state.selectedPartner;
+    const search = this.state.searchTerm || "";
 
     const url =
       "/report/pdf/bir_module.form_2307/?id=" +
       BP +
       "&month=" +
       current +
+      "&search=" +
+      encodeURIComponent(search) +
       "&trigger=view";
     const previewFrame = this.rootRef.el.querySelector("#preview_2307");
     if (previewFrame) {
@@ -163,14 +183,16 @@ export class Form2307 extends Component {
 
     const data = await this.orm.call("account.move", "x_get_2307_data", [
       "",
-      [[BP, current], "not_transactional", "table", "2307-Quarterly", "none"],
+      [[BP, current], "not_transactional", "table", "2307-Quarterly", "none", search],
     ]);
 
     const ammendTable = this.rootRef.el.querySelector("#ammend_table_2307");
     if (ammendTable) {
       ammendTable.innerHTML = construct_ammendment_no_action(data);
       if (window.jQuery) {
-        window.jQuery("#bir_ammend_table").DataTable();
+        const table = window.jQuery("#bir_ammend_table").DataTable({
+          searching: false
+        });
         window.jQuery(".dataTables_length").addClass("bs-select");
       }
     }

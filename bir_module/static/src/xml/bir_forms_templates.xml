@@ -32,6 +32,16 @@
                         </div>
                         <input type="hidden" id="partner_2307_id" class="partner-id-field"/>
                     </div>
+
+                    <div class="bir-control-group">
+                        <label for="search_2307" class="bir-control-label">Search Bill</label>
+                        <input type="text" 
+                               id="search_2307" 
+                               class="bir-form-control"
+                               placeholder="Search by bill name"
+                               t-on-input="onSearchChange"
+                               autocomplete="off"/>
+                    </div>
                     
                     <div class="bir-control-group">
                         <button type="button" 

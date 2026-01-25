@@ -34,7 +34,8 @@
 		<t t-call='web.basic_layout'>
 
 			<t t-set="company_id" t-value="env['account.move'].x_fetch_company_id()"/>
-			<t t-set="values" t-value="env['account.move'].x_get_2307_data([[id, month], 'not_transactional', trigger, '2307-Quarterly', tranid])"/>
+			<t t-set="search_param" t-value="request.params.get('search', '')"/>
+			<t t-set="values" t-value="env['account.move'].x_get_2307_data([[id, month], 'not_transactional', trigger, '2307-Quarterly', tranid, search_param])"/>
 			<t t-set='company' t-value="request.env['res.company'].search([('id', '=', company_id)])"/>
 			<t t-set='payor' t-value="request.env['res.partner'].search([('id', '=', company.partner_id.id)])"/>
 			<t t-set='payee' t-value="request.env['res.partner'].search([('id', '=', id)])"/>

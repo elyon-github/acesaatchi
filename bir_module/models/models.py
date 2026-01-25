@@ -79,10 +79,29 @@ class bir_reports(models.Model):
 
 
     def x_2307_forms(self, args):
-        return self.env.ref('bir_module.2307_report_action_id_multi').report_action(self, data={'name': 'BIR Form 2550M', 'month': args['month'], 'id': args['id'], 'trigger': args['trigger'], 'tranid': args['tranid']})
+        from urllib.parse import urlencode
+        search = args.get('search', '')
+        
+        # Build URL with search parameter
+        url_params = {
+            'id': args['id'],
+            'month': args['month'],
+            'trigger': args['trigger'],
+            'tranid': args['tranid'],
+            'search': search
+        }
+        
+        url = f"/report/pdf/bir_module.form_2307/?{urlencode(url_params)}"
+        
+        return {
+            'type': 'ir.actions.act_url',
+            'url': url,
+            'target': 'new',
+        }
 
     def x_get_2307_data(self, args):
         data = []
+        search = args[5] if len(args) > 5 else ""
 
         if args[2] == 'reprint':
             transactional = self._2307_query_reprint(args)
@@ -91,7 +110,7 @@ class bir_reports(models.Model):
         #     transactional = self._2307_query_ammend(args)
         #     data.append(transactional)
         else:
-            transactional = self._2307_query_normal(args)
+            transactional = self._2307_query_normal(args, search)
             data.append(transactional)
 
         if args[2] == 'table':
@@ -152,7 +171,7 @@ class bir_reports(models.Model):
 
     #     return val
 
-    def _2307_query_normal(self, args):
+    def _2307_query_normal(self, args, search=""):
         query = """ SELECT Abs(T1.price_subtotal)*(Abs(T3.amount)/100), T1.price_subtotal, T5.name, T5.vat, T4.name, T3.name,
             T0.id, T0.move_type, T0.name, T0.amount_total, T0.amount_untaxed, T0.invoice_date, T0.invoice_date_due, T0.payment_state {2} 
             FROM account_move T0 
@@ -164,7 +183,7 @@ class bir_reports(models.Model):
             {3} 
             WHERE T0.state='posted' AND T0.company_id = {0} AND T0.move_type = 'in_invoice' {1}"""
 
-        end_parameter = self._2307_params(trans=args[1], id=args[0])
+        end_parameter = self._2307_params(trans=args[1], id=args[0], search=search)
 
         self._cr.execute(query.format(self.env.company.id,
                          end_parameter[0], end_parameter[1], end_parameter[2]))
@@ -176,6 +195,7 @@ class bir_reports(models.Model):
         param = ""
         field = ""
         join = ""
+        search = kwargs.get('search', '')
 
         if kwargs['trans'] == "transactional":
             param = " AND T0.id = " + str(kwargs['id'][0])
@@ -189,6 +209,10 @@ class bir_reports(models.Model):
 
             field = ", T0.invoice_date, T6.id "
             join = "LEFT JOIN bir_module_print_history_line T6 ON T6.move_id = T0.id AND T6.form_type = '2307'"
+
+        # Add search filter for bill name if provided
+        if search:
+            param += " AND T0.name ILIKE '%" + search + "%'"
 
         return [param, field, join]
 
@@ -552,12 +576,12 @@ class bir_reports(models.Model):
     def sawt_map_params(self, param, year):
         append = ""
         if param[0] == "monthly":
-            append = "EXTRACT(MONTH FROM T0.date) = " + \
+            append = "EXTRACT(MONTH FROM T0.invoice_date) = " + \
                 str(param[1]) + \
-                " AND EXTRACT(YEAR FROM T0.date) = " + str(year)
+                " AND EXTRACT(YEAR FROM T0.invoice_date) = " + str(year)
         else:
-            append = "EXTRACT(MONTH FROM T0.date) >= " + str(param[0]) + "  AND EXTRACT(MONTH FROM T0.date) <= " + str(
-                param[1]) + " AND EXTRACT(YEAR FROM T0.date) = " + str(year)
+            append = "EXTRACT(MONTH FROM T0.invoice_date) >= " + str(param[0]) + "  AND EXTRACT(MONTH FROM T0.invoice_date) <= " + str(
+                param[1]) + " AND EXTRACT(YEAR FROM T0.invoice_date) = " + str(year)
         return append
 
     def export_sawt_map(self, month, report):
