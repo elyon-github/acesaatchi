@@ -989,10 +989,9 @@ class bir_reports(models.Model):
         val = []
         if vat != False:
             if vat[3] == "-":
-                val = [vat[:3], vat[4:7], vat[8:], '000']
+                val = [vat[:3], vat[4:7], vat[8:11], vat[12:15]]  # Extract actual last segment
             else:
-                val = [vat[:3], vat[3:6], vat[6:], '000']
-
+                val = [vat[:3], vat[3:6], vat[6:9], vat[9:12]]  # Extract actual last segment
         return val
 
     def x_fetch_company_id(self):
