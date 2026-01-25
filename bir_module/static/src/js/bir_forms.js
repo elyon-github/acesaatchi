@@ -22,6 +22,9 @@ export class Form2307 extends Component {
     this.state = useState({
       currentMonth: get_current(),
       selectedPartner: 0,
+      partnersList: [],
+      filteredPartners: [],
+      searchTerm: "",
     });
 
     onMounted(async () => {
@@ -31,48 +34,147 @@ export class Form2307 extends Component {
 
   async loadInitialData() {
     const data = await this.orm.call("account.move", "fetch_BP", [""]);
-    const partnerSelect = this.rootRef.el.querySelector("#partner_2307");
-    if (partnerSelect) {
-      partnerSelect.innerHTML = construct_partners(data);
-      this.state.selectedPartner = partnerSelect.value;
+    this.state.partnersList = data;
+    
+    const partnerInput = this.rootRef.el.querySelector("#partner_2307");
+    if (partnerInput && data.length > 0) {
+      // Set first partner as default
+      this.state.selectedPartner = data[0][0];
+      partnerInput.value = data[0][1];
+      
+      // Add event listeners for dropdown
+      partnerInput.addEventListener("input", () => this.onPartnerSearch());
+      partnerInput.addEventListener("focus", () => this.showPartnerDropdown());
+      document.addEventListener("click", (e) => this.handleClickOutside(e));
+      
       await this.loadData();
+    }
+  }
+
+  onPartnerSearch() {
+    const input = this.rootRef.el.querySelector("#partner_2307");
+    const searchTerm = (input.value || "").toLowerCase();
+    
+    if (searchTerm.length === 0) {
+      this.state.filteredPartners = this.state.partnersList;
+    } else {
+      this.state.filteredPartners = this.state.partnersList.filter(partner => 
+        partner[1].toLowerCase().includes(searchTerm) ||
+        partner[0].toString().includes(searchTerm)
+      );
+    }
+    
+    this.showPartnerDropdown();
+  }
+
+  showPartnerDropdown() {
+    const dropdown = this.rootRef.el.querySelector("#partner_2307_dropdown");
+    if (!dropdown) return;
+
+    const partners = this.state.filteredPartners;
+    let html = "";
+    
+    if (partners.length === 0) {
+      html = '<div class="bir-partner-option" style="color: #999; cursor: default;">No partners found</div>';
+    } else {
+      for (let partner of partners) {
+        const isSelected = this.state.selectedPartner === partner[0];
+        html += `<div class="bir-partner-option ${isSelected ? 'selected' : ''}" data-id="${partner[0]}" data-name="${partner[1]}">
+          <span class="bir-partner-option-name">${partner[1]}</span>
+          <span class="bir-partner-option-id">ID: ${partner[0]}</span>
+        </div>`;
+      }
+    }
+
+    dropdown.innerHTML = html;
+    dropdown.classList.add("active");
+
+    // Add click listeners to options
+    const options = dropdown.querySelectorAll(".bir-partner-option[data-id]");
+    options.forEach(option => {
+      option.addEventListener("click", (e) => this.selectPartner(e));
+    });
+  }
+
+  selectPartner(event) {
+    const option = event.target.closest(".bir-partner-option");
+    const partnerId = parseInt(option.dataset.id);
+    const partnerName = option.dataset.name;
+
+    this.state.selectedPartner = partnerId;
+    this.state.searchTerm = ""; // Clear search when partner changes
+    
+    const input = this.rootRef.el.querySelector("#partner_2307");
+    const idField = this.rootRef.el.querySelector("#partner_2307_id");
+    const searchInput = this.rootRef.el.querySelector("#search_2307");
+    
+    input.value = partnerName;
+    idField.value = partnerId;
+    if (searchInput) {
+      searchInput.value = "";
+    }
+
+    const dropdown = this.rootRef.el.querySelector("#partner_2307_dropdown");
+    dropdown.classList.remove("active");
+
+    this.loadData();
+  }
+
+  onSearchChange(ev) {
+    this.state.searchTerm = ev.target.value;
+    this.loadData();
+  }
+
+  handleClickOutside(event) {
+    const input = this.rootRef.el?.querySelector("#partner_2307");
+    const dropdown = this.rootRef.el?.querySelector("#partner_2307_dropdown");
+    
+    if (input && dropdown && !input.contains(event.target) && !dropdown.contains(event.target)) {
+      dropdown.classList.remove("active");
     }
   }
 
   async onPrint2307() {
     const monthInput = this.rootRef.el.querySelector("#month_2307");
-    const partnerSelect = this.rootRef.el.querySelector("#partner_2307");
     const current = monthInput ? monthInput.value : this.state.currentMonth;
-    const BP = partnerSelect ? partnerSelect.value : this.state.selectedPartner;
+    const BP = this.state.selectedPartner;
+    const search = this.state.searchTerm || "";
 
     const data = await this.orm.call("account.move", "x_2307_forms", [
       "",
-      { month: current, id: BP, trigger: "print", tranid: "none" },
+      { month: current, id: BP, trigger: "print", tranid: "none", search: search },
     ]);
     this.action.doAction(data);
   }
 
-  async onMonthKeypress(ev) {
-    if (ev.which === 13) {
-      await this.loadData();
+  onMonthChange(ev) {
+    this.state.searchTerm = ""; // Clear search when month changes
+    const searchInput = this.rootRef.el.querySelector("#search_2307");
+    if (searchInput) {
+      searchInput.value = "";
     }
-  }
-
-  async onPartnerChange() {
-    await this.loadData();
+    this.loadData();
   }
 
   async loadData() {
     const monthInput = this.rootRef.el.querySelector("#month_2307");
-    const partnerSelect = this.rootRef.el.querySelector("#partner_2307");
-    const BP = partnerSelect ? partnerSelect.value : this.state.selectedPartner;
-    const current = monthInput ? monthInput.value : this.state.currentMonth;
+    let current = this.state.currentMonth;
+    
+    if (monthInput && monthInput.value) {
+      // Extract YYYY-MM from the date value (ignores the day)
+      current = monthInput.value.substring(0, 7);
+    }
+    
+    const BP = this.state.selectedPartner;
+    const search = this.state.searchTerm || "";
 
     const url =
       "/report/pdf/bir_module.form_2307/?id=" +
       BP +
       "&month=" +
       current +
+      "&search=" +
+      encodeURIComponent(search) +
       "&trigger=view";
     const previewFrame = this.rootRef.el.querySelector("#preview_2307");
     if (previewFrame) {
@@ -81,14 +183,16 @@ export class Form2307 extends Component {
 
     const data = await this.orm.call("account.move", "x_get_2307_data", [
       "",
-      [[BP, current], "not_transactional", "table", "2307-Quarterly", "none"],
+      [[BP, current], "not_transactional", "table", "2307-Quarterly", "none", search],
     ]);
 
     const ammendTable = this.rootRef.el.querySelector("#ammend_table_2307");
     if (ammendTable) {
       ammendTable.innerHTML = construct_ammendment_no_action(data);
       if (window.jQuery) {
-        window.jQuery("#bir_ammend_table").DataTable();
+        const table = window.jQuery("#bir_ammend_table").DataTable({
+          searching: false
+        });
         window.jQuery(".dataTables_length").addClass("bs-select");
       }
     }
@@ -166,15 +270,18 @@ export class Form2550M extends Component {
     }
   }
 
-  async onMonthKeypress(ev) {
-    if (ev.which === 13) {
-      await this.loadData();
-    }
+  onMonthChange(ev) {
+    this.loadData();
   }
 
   async loadData() {
     const monthInput = this.rootRef.el.querySelector("#month_2550M");
-    const current = monthInput ? monthInput.value : this.state.currentMonth;
+    let current = this.state.currentMonth;
+    
+    if (monthInput && monthInput.value) {
+      // Extract YYYY-MM from the date value (ignores the day)
+      current = monthInput.value.substring(0, 7);
+    }
 
     const url =
       "/report/pdf/bir_module.form_2550M?month=" +
@@ -224,7 +331,12 @@ export class Form2550Q extends Component {
 
   async onPrint2550Q() {
     const monthInput = this.rootRef.el.querySelector("#month_2550Q");
-    const current = monthInput ? monthInput.value : this.state.currentMonth;
+    let current = this.state.currentMonth;
+    
+    if (monthInput && monthInput.value) {
+      // Extract YYYY-MM from the date value (ignores the day)
+      current = monthInput.value.substring(0, 7);
+    }
 
     const data = await this.orm.call("account.move", "x_2550_print_action", [
       "",
@@ -233,15 +345,18 @@ export class Form2550Q extends Component {
     this.action.doAction(data);
   }
 
-  async onMonthKeypress(ev) {
-    if (ev.which === 13) {
-      await this.loadData();
-    }
+  onMonthChange(ev) {
+    this.loadData();
   }
 
   async loadData() {
     const monthInput = this.rootRef.el.querySelector("#month_2550Q");
-    const current = monthInput ? monthInput.value : this.state.currentMonth;
+    let current = this.state.currentMonth;
+    
+    if (monthInput && monthInput.value) {
+      // Extract YYYY-MM from the date value (ignores the day)
+      current = monthInput.value.substring(0, 7);
+    }
 
     const url =
       "/report/pdf/bir_module.form_2550Q?month=" +
@@ -300,15 +415,19 @@ export class Form1601E extends Component {
     this.action.doAction(data);
   }
 
-  async onMonthKeypress(ev) {
-    if (ev.which === 13) {
-      this.updatePreview();
-    }
+  onMonthChange(ev) {
+    this.updatePreview();
   }
 
   updatePreview() {
     const monthInput = this.rootRef.el.querySelector("#month_1601e");
-    const current = monthInput ? monthInput.value : this.state.currentMonth;
+    let current = this.state.currentMonth;
+    
+    if (monthInput && monthInput.value) {
+      // Extract YYYY-MM from the date value (ignores the day)
+      current = monthInput.value.substring(0, 7);
+    }
+    
     const url = "/report/pdf/bir_module.form_1601e?month=" + current;
     const previewFrame = this.rootRef.el.querySelector("#preview_1601e");
     if (previewFrame) {

@@ -30,16 +30,19 @@ export function format_vat(x) {
 
 export function construct_sawt(data) {
   let html =
-    "<table class='table table-striped table-hover dt-responsive nowrap' id='sawt_datatable'><thead><tr>";
+    "<table class='table table-striped table-hover dt-responsive nowrap bir-data-table' id='sawt_datatable' role='table'><thead><tr>";
 
   html +=
-    "<th scope='col'>Number</th>\
-        <th scope='col'>Taxpayer Identification Number</th>\
+    "<th scope='col'>No.</th>\
+        <th scope='col'>Taxpayer ID (TIN)</th>\
         <th scope='col'>Corporation</th>\
+        <th scope='col'>Bill Date</th>\
+        <th scope='col'>Due Date</th>\
+        <th scope='col'>Payment Status</th>\
         <th scope='col'>ATC Code</th>\
-        <th scope='col'>Income Payment</th>\
+        <th scope='col' class='text-right'>Income Payment</th>\
         <th scope='col'>Tax Rate</th>\
-        <th scope='col'>Tax Withheld</th></tr></thead><tbody>";
+        <th scope='col' class='text-right'>Tax Withheld</th></tr></thead><tbody>";
 
   let sub = 0;
   let tax = 0;
@@ -48,6 +51,25 @@ export function construct_sawt(data) {
     let income = Math.abs(data[x][1]);
     let rate = Math.abs(data[x][5]);
     let amount = Math.abs(data[x][0]);
+    let billDate = data[x][6] || "-";
+    let dueDate = data[x][7] || "-";
+    let paymentStatus = data[x][8] || "Unpaid";
+    
+    // Format dates if they exist
+    if (billDate !== "-" && billDate) {
+      billDate = new Date(billDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+    if (dueDate !== "-" && dueDate) {
+      dueDate = new Date(dueDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+    
+    // Payment status badge
+    let statusBadge = 'bir-badge-warning';
+    if (paymentStatus.toLowerCase() === 'paid') {
+      statusBadge = 'bir-badge-success';
+    } else if (paymentStatus.toLowerCase() === 'overdue') {
+      statusBadge = 'bir-badge-danger';
+    }
 
     html += "<tr>";
     html +=
@@ -60,6 +82,17 @@ export function construct_sawt(data) {
             <td>" +
       data[x][3] +
       "</td>\
+            <td>" +
+      billDate +
+      "</td>\
+            <td>" +
+      dueDate +
+      "</td>\
+            <td><span class='bir-badge " +
+      statusBadge +
+      "'>" +
+      paymentStatus +
+      "</span></td>\
             <td>" +
       data[x][4] +
       "</td>\
@@ -84,7 +117,7 @@ export function construct_sawt(data) {
         <th scope='row'>" +
     (num + 1) +
     "</td>\
-        <td></td><td></td><td></td>\
+        <td></td><td></td><td></td><td></td><td></td><td></td>\
         <td scope='row'>" +
     numberWithCommas(sub) +
     "</td>\
@@ -108,21 +141,21 @@ export function construct_partners(data) {
 
 export function construct_slp(data) {
   let html =
-    "<table class='table table-striped table-hover dt-responsive nowrap' id='slp_datatable'><thead><tr>";
+    "<table class='table table-striped table-hover dt-responsive nowrap bir-data-table' id='slp_datatable' role='table'><thead><tr>";
 
   html +=
     "<th scope='col'>Taxable Month</th>\
-        <th scope='col'>Taxpayer Identification Number</th>\
+        <th scope='col'>Taxpayer ID (TIN)</th>\
         <th scope='col'>Registered Name</th>\
-        <th scope='col'>Gross Purchase</th>\
-        <th scope='col'>Exempt Purchase</th>\
-        <th scope='col'>Zero-rated Purchase</th>\
-        <th scope='col'>Taxable Purchase</th>\
-        <th scope='col'>Purchase of Services</th>\
-        <th scope='col'>Purchase of Capital goods</th>\
-        <th scope='col'>Purchase of Goods other than Capital Goods</th>\
-        <th scope='col'>VAT</th>\
-        <th scope='col'>Gross Taxation</th></tr></thead><tbody>";
+        <th scope='col' class='text-right'>Gross Purchase</th>\
+        <th scope='col' class='text-right'>Exempt</th>\
+        <th scope='col' class='text-right'>Zero-Rated</th>\
+        <th scope='col' class='text-right'>Taxable</th>\
+        <th scope='col' class='text-right'>Services</th>\
+        <th scope='col' class='text-right'>Capital Goods</th>\
+        <th scope='col' class='text-right'>Other Goods</th>\
+        <th scope='col' class='text-right'>VAT</th>\
+        <th scope='col' class='text-right'>Gross Tax</th></tr></thead><tbody>";
 
   let gross_sales_po_tot = 0;
   let excempt_tot = 0;
@@ -223,18 +256,18 @@ export function construct_slp(data) {
 
 export function construct_sls(data) {
   let html =
-    "<table class='table table-striped table-hover dt-responsive nowrap' id='sls_datatable'><thead><tr>";
+    "<table class='table table-striped table-hover dt-responsive nowrap bir-data-table' id='sls_datatable' role='table'><thead><tr>";
 
   html +=
     "<th scope='col'>Taxable Month</th>\
-        <th scope='col'>Taxpayer Identification Number</th>\
+        <th scope='col'>Taxpayer ID (TIN)</th>\
         <th scope='col'>Registered Name</th>\
-        <th scope='col'>Gross Purchase</th>\
-        <th scope='col'>Exempt Purchase</th>\
-        <th scope='col'>Zero-rated Purchase</th>\
-        <th scope='col'>Taxable Purchase</th>\
-        <th scope='col'>VAT</th>\
-        <th scope='col'>Gross Taxation</th></tr></thead><tbody>";
+        <th scope='col' class='text-right'>Gross Purchase</th>\
+        <th scope='col' class='text-right'>Exempt</th>\
+        <th scope='col' class='text-right'>Zero-Rated</th>\
+        <th scope='col' class='text-right'>Taxable</th>\
+        <th scope='col' class='text-right'>VAT</th>\
+        <th scope='col' class='text-right'>Gross Tax</th></tr></thead><tbody>";
 
   let gross_sales_po_tot = 0;
   let excempt_tot = 0;
@@ -319,36 +352,36 @@ export function construct_print_types(data) {
 
 export function construct_print_history(data, component) {
   let html =
-    "<table class='table table-striped table-hover dt-responsive nowrap' id='print_history_datatable'><thead><tr>";
+    "<table class='table table-striped table-hover dt-responsive nowrap bir-data-table' id='print_history_datatable' role='table'><thead><tr>";
 
   html +=
-    "<th scope='col'>id</th>\
+    "<th scope='col'>ID</th>\
         <th scope='col'>Form Type</th>\
         <th scope='col'>Print Date</th>\
-        <th scope='col'>Responsible</th>\
-        <th>Action</th></tr></thead><tbody>";
+        <th scope='col'>User</th>\
+        <th scope='col'>Action</th></tr></thead><tbody>";
 
   for (let y in data) {
     html +=
-      "<tr><td class='print_id_val'>" +
+      "<tr><td class='print_id_val fw-bold'>" +
       data[y][0] +
       "</td>\
-            <td>" +
+            <td><span class='bir-badge bir-badge-info'>" +
       data[y][1] +
-      "</td>\
+      "</span></td>\
             <td>" +
       data[y][2] +
       "</td>\
             <td>" +
       data[y][3] +
       "</td>\
-            <td>\
-            <button class='btn btn-success print_details_btn' value='" +
+            <td class='bir-table-actions'>\
+            <button class='btn btn-sm btn-info print_details_btn' value='" +
       data[y][0] +
-      "' data-bs-toggle='modal' data-bs-target='#print_details_modal'>Details</button>\
-            <button class='btn btn-success preview_details_btn' value='" +
+      "' data-bs-toggle='modal' data-bs-target='#print_details_modal' title='View Details'><i class='fa fa-eye'></i> Details</button>\
+            <button class='btn btn-sm btn-primary preview_details_btn' value='" +
       data[y][0] +
-      "' data-bs-toggle='modal' data-bs-target='#print_preview_modal'>Preview</button>\
+      "' data-bs-toggle='modal' data-bs-target='#print_preview_modal' title='Preview'><i class='fa fa-print'></i> Preview</button>\
             </td></tr>";
   }
 
@@ -380,26 +413,28 @@ export function construct_print_history(data, component) {
 
 export function construct_print_details(data) {
   let html =
-    "<table class='table table-striped table-hover dt-responsive nowrap' id='print_history_line_datatable'><thead><tr>";
+    "<table class='table table-striped table-hover dt-responsive nowrap bir-data-table' id='print_history_line_datatable' role='table'><thead><tr>";
 
   html +=
-    "<th scope='col'>Invoice/Bill Code</th>\
+    "<th scope='col'>Document Code</th>\
         <th scope='col'>Type</th>\
         </tr></thead><tbody>";
 
   for (let y in data) {
     let scope = "Vendor Bill";
+    let badgeClass = "bir-badge-warning";
     if (data[y][2] == "out_invoice") {
       scope = "Customer Invoice";
+      badgeClass = "bir-badge-success";
     }
     html +=
       "<tr>\
-            <td>" +
+            <td class='fw-bold'>" +
       data[y][1] +
       "</td>\
-            <td>" +
+            <td><span class='bir-badge " + badgeClass + "'>" +
       scope +
-      "</td></tr>";
+      "</span></td></tr>";
   }
   html += "</tbody></table>";
   return html;
@@ -407,33 +442,70 @@ export function construct_print_details(data) {
 
 export function construct_ammendment_no_action(data) {
   let html =
-    "<table class='table table-striped table-hover dt-responsive nowrap' id='bir_ammend_table'><thead><tr>";
+    "<table class='table table-striped table-hover dt-responsive nowrap bir-data-table' id='bir_ammend_table' role='table'><thead><tr>";
 
   html +=
-    "<th scope='col'>id</th>\
-        <th scope='col'>Name</th>\
+    "<th scope='col'>Name</th>\
         <th scope='col'>Type</th>\
-        <th scope='col'>Document Total</th>\
+        <th scope='col'>Bill Date</th>\
+        <th scope='col'>Due Date</th>\
+        <th scope='col'>Payment Status</th>\
+        <th scope='col' class='text-right'>Untaxed Amount</th>\
+        <th scope='col' class='text-right'>Total Amount</th>\
         </tr></thead><tbody>";
 
   for (let y in data) {
     let scope = "Vendor Bill";
+    let badgeClass = "bir-badge-warning";
     if (data[y][2] == "out_invoice") {
       scope = "Customer Invoice";
+      badgeClass = "bir-badge-success";
     }
+    
+    let billDate = data[y][5] || "-";
+    let dueDate = data[y][6] || "-";
+    let paymentStatus = data[y][7] || "Unpaid";
+    
+    // Format dates if they exist
+    if (billDate !== "-" && billDate) {
+      billDate = new Date(billDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+    if (dueDate !== "-" && dueDate) {
+      dueDate = new Date(dueDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+    
+    // Payment status badge
+    let statusBadge = 'bir-badge-warning';
+    if (paymentStatus.toLowerCase() === 'paid') {
+      statusBadge = 'bir-badge-success';
+    } else if (paymentStatus.toLowerCase() === 'overdue') {
+      statusBadge = 'bir-badge-danger';
+    }
+    
     html +=
       "<tr>\
             <td>" +
-      data[y][0] +
-      "</td>\
-            <td>" +
       data[y][1] +
       "</td>\
-            <td>" +
+            <td><span class='bir-badge " + badgeClass + "'>" +
       scope +
+      "</span></td>\
+            <td>" +
+      billDate +
       "</td>\
             <td>" +
+      dueDate +
+      "</td>\
+            <td><span class='bir-badge " +
+      statusBadge +
+      "'>" +
+      paymentStatus +
+      "</span></td>\
+            <td class='text-right'>" +
       numberWithCommas(data[y][3]) +
+      "</td>\
+            <td class='text-right'>" +
+      numberWithCommas(data[y][4]) +
       "</td></tr>";
   }
 
@@ -443,36 +515,38 @@ export function construct_ammendment_no_action(data) {
 
 export function construct_ammendment(data) {
   let html =
-    "<table class='table table-striped table-hover dt-responsive nowrap' id='bir_ammend_table'><thead><tr>";
+    "<table class='table table-striped table-hover dt-responsive nowrap bir-data-table' id='bir_ammend_table' role='table'><thead><tr>";
 
   html +=
-    "<th scope='col'>id</th>\
+    "<th scope='col'>ID</th>\
         <th scope='col'>Name</th>\
         <th scope='col'>Type</th>\
-        <th scope='col'>Document Total</th>\
-        <th scope='col'>Exclude</th>\
+        <th scope='col' class='text-right'>Total Amount</th>\
+        <th scope='col' class='text-center'>Exclude</th>\
         </tr></thead><tbody>";
 
   for (let y in data) {
     let scope = "Vendor Bill";
+    let badgeClass = "bir-badge-warning";
     if (data[y][2] == "out_invoice") {
       scope = "Customer Invoice";
+      badgeClass = "bir-badge-success";
     }
     html +=
       "<tr>\
-            <td>" +
+            <td class='fw-bold'>" +
       data[y][0] +
       "</td>\
             <td>" +
       data[y][1] +
       "</td>\
-            <td>" +
+            <td><span class='bir-badge " + badgeClass + "'>" +
       scope +
-      "</td>\
-            <td>" +
+      "</span></td>\
+            <td class='text-right'>" +
       numberWithCommas(data[y][3]) +
       "</td>\
-            <td class='form-check'><center><input type='checkbox' class='form-check-input' id='2307-ammend-check'/></center></td></tr>";
+            <td class='bir-table-checkbox text-center'><input type='checkbox' class='form-check-input bir-checkbox' id='ammend-check-" + data[y][0] + "' aria-label='Exclude document' /></td></tr>";
   }
 
   html += "</tbody></table>";

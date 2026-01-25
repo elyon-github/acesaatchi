@@ -1,89 +1,207 @@
 <?xml version="1.0" encoding='utf-8'?>
 <odoo>
 
-	<!-- <report ### V13 Deprecated 
-		id="bir_form_2307"
-		string="BIR Form 2307"
-		model="account.move"
-		report_type="qweb-pdf"
-		name="bir_module.form_2307"
-		file="bir_module.form_2307"/> -->
+	<!-- Paper Format for Legal Size - MUST BE FIRST -->
+	<record id="paperformat_bir_legal" model="report.paperformat">
+		<field name="name">BIR Legal</field>
+		<field name="default" eval="False"/>
+		<field name="format">custom</field>
+		<field name="page_height">330</field>
+		<field name="page_width">216</field>
+		<field name="orientation">Portrait</field>
+		<field name="margin_top">0</field>
+		<field name="margin_bottom">0</field>
+		<field name="margin_left">0</field>
+		<field name="margin_right">0</field>
+		<field name="header_line" eval="False"/>
+		<field name="header_spacing">0</field>
+		<field name="dpi">96</field>
+	</record>
+
+	<!-- Report Action - REFERENCES paperformat above -->
 	<record id="2307_report_action_id_multi" model="ir.actions.report">
 		<field name="name">BIR Form 2307 multi</field>
 		<field name="model">account.move</field>
 		<field name="report_type">qweb-pdf</field>
 		<field name="report_name">bir_module.form_2307</field>
 		<field name="report_file">bir_module.form_2307</field>
-		<!-- <field name="binding_model_id" ref="account.model_account_move"/> -->
 		<field name="binding_type">report</field>
+		<field name="paperformat_id" ref="bir_module.paperformat_bir_legal"/>
+		<field name="print_report_name">'BIR Form 2307 - %s' % (object.partner_id.name)</field>
 	</record>
 
 	<template id="form_2307">
 		<t t-call='web.basic_layout'>
 
 			<t t-set="company_id" t-value="env['account.move'].x_fetch_company_id()"/>
-			<t t-set="values" t-value="env['account.move'].x_get_2307_data([[id, month], 'not_transactional', trigger, '2307-Quarterly', tranid])"/>
+			<t t-set="search_param" t-value="request.params.get('search', '')"/>
+			<t t-set="values" t-value="env['account.move'].x_get_2307_data([[id, month], 'not_transactional', trigger, '2307-Quarterly', tranid, search_param])"/>
 			<t t-set='company' t-value="request.env['res.company'].search([('id', '=', company_id)])"/>
 			<t t-set='payor' t-value="request.env['res.partner'].search([('id', '=', company.partner_id.id)])"/>
+			<t t-set='payee' t-value="request.env['res.partner'].search([('id', '=', id)])"/>
 
-			<div class="page">
-				<p style="page-break-before:always;"> </p>
+			<!-- OFFSET CONTROLS - Adjust these to move the entire form -->
+			<t t-set="offset_top" t-value="5"/>     <!-- Add/subtract mm to move everything up/down -->
+			<t t-set="offset_left" t-value="-5"/>    <!-- Add/subtract mm to move everything left/right -->
 
-				<t t-set='payee' t-value="request.env['res.partner'].search([('id', '=', id)])"/>
+			<div class="page" style="width: 260mm; height: 390mm; margin: 0; padding: 0; position: relative;">
 
-				<div class="jumbotron jumbotron-fluid" style="background-image: url('/bir_module/static/img/2307.jpg');  background-repeat: no-repeat; background-size: 290mm 480mm; width:290mm; height:480mm;position: absolute;">
-					<!--upper container-->
-					<div class="container" style="position: relative;text-align: left; color: black; top:120px; width:100%">
-					<!-- <div class="container" style="text-align: left; color: black; top:90px; width:100%;"> -->
-						<t t-set="period" t-value="env['account.move'].fetch_period_dates(month)"/>
-						<div class="left" style="position: absolute; top:80px; left:265px;letter-spacing:8px; font-size:21px; width:300px;"><t t-esc="period[1]+' 01 '+period[5]"/></div>
-						<div class="right" style="position: absolute; top:80px; left:725px;letter-spacing:8px; font-size:21px; width:300px;"><t t-esc="period[2]+' '+period[4]+' '+period[5]"/></div>
+				<div style="background-image: url('/bir_module/static/img/2307.jpg'); background-repeat: no-repeat; background-size: 262mm 392mm; width: 262mm; height: 392mm; position: absolute; top: 0; left: 0;">
+					
+					<!-- Part I - For the Period -->
+					<t t-set="period" t-value="env['account.move'].fetch_period_dates(month) if month else []"/>
+					
+					<!-- From: Month Day Year -->
+					<div class="left" t-attf-style="position: absolute;  top: #{39 + offset_top}mm; left: #{68 + offset_left}mm;letter-spacing:11px; font-size:11pt;">
+						<span><t t-esc="period[1] if len(period) > 1 else ''"/></span>
+						<span style="margin-left: 4px">01</span>
+						<span style="margin-left: 4px"><t t-esc="period[5] if len(period) > 5 else ''"/></span>
+					</div>
+					<!-- To: Month Day Year -->
+					<div class="right" t-attf-style="position: absolute;  top: #{39 + offset_top}mm; left: #{179 + offset_left}mm; letter-spacing:11px; font-size:11pt;">
+						<span><t t-esc="period[2] if len(period) > 2 else ''"/></span>
+						<span style="margin-left: 4px"><t t-esc="period[4] if len(period) > 4 else ''"/></span>
+						<span style="margin-left: 4px"><t t-esc="period[5] if len(period) > 5 else ''"/></span>
+					</div>
+					
 
-						<t t-set="payee_vat" t-value="env['account.move'].x_slice_vat(payee.vat)"/>
-						<div class="left" style="position: absolute; top:143px; left:370px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payee_vat[0]"/></div>
-						<div class="left" style="position: absolute; top:143px; left:465px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payee_vat[1]"/></div>
-						<div class="left" style="position: absolute; top:143px; left:560px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payee_vat[2]"/></div>
-						<div class="left" style="position: absolute; top:143px; left:658px; letter-spacing:14px; font-size:23px;width:200px;"><t t-esc="payee_vat[3]"/></div>
-
-						<div class="left" style="position: absolute;top:205px;left:55px;"><t t-esc="payee.name"/></div>
-						<div class="left" style="position: absolute; top:260px; left:55px;"><small><t t-esc="payee.contact_address_complete"/></small></div>
-						<div class="right" style="position: absolute; top:257px; left: 988px; letter-spacing: 5px; font-size: 21px" ><t t-esc="payee.zip"/></div>
-
-
-						<t t-set="payor_vat" t-value="env['account.move'].x_slice_vat(payor.vat)"/>
-						<div class="left" style="position: absolute; top:385px; left:370px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payor_vat[0]"/></div>
-						<div class="left" style="position: absolute; top:385px; left:465px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payor_vat[1]"/></div>
-						<div class="left" style="position: absolute; top:385px; left:560px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payor_vat[2]"/></div>
-						<div class="left" style="position: absolute; top:385px; left:658px; letter-spacing:14px; font-size:23px;width:200px;"><t t-esc="payor_vat[3]"/></div>
-
-						<div class="left" style="position: absolute; top:445px; left:55px;"><t t-esc="payor.name"/></div>
-						<div class="left" style="position: absolute; top:500px; left:55px;"><small><t t-esc="payor.contact_address_complete"/></small></div>
-						<div class="right" style="position: absolute; top:497px; left: 988px; letter-spacing: 5px; font-size: 21px" ><t t-esc="payor.zip"/></div>
-
-						<!-- <div style="width:45mm;text-align:center;padding-top:900px;"><t t-esc='values[0]'/></div> -->
-							
+					<!-- Part II - Payee Information -->
+					<t t-set="payee_vat" t-value="env['account.move'].x_slice_vat(payee.vat)"/>
+					
+					<!-- Payee TIN (4 boxes) -->
+					<div t-attf-style="position: absolute; top: #{53 + offset_top}mm; left: #{93 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
+						<t t-esc="payee_vat[0]"/>
+					</div>
+					<div t-attf-style="position: absolute; top: #{53 + offset_top}mm; left: #{116 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
+						<t t-esc="payee_vat[1]"/>
+					</div>
+					<div t-attf-style="position: absolute; top: #{53 + offset_top}mm; left: #{139 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
+						<t t-esc="payee_vat[2]"/>
+					</div>
+					<div t-attf-style="position: absolute; top: #{53 + offset_top}mm; left: #{163 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
+						<t t-esc="payee_vat[3]"/>
 					</div>
 
+					<!-- Payee Registered Name -->
+					<div t-attf-style="position: absolute; top: #{65 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; max-width: 230mm;">
+						<t t-esc="payee.name.replace('| Trade', '').strip()"/>
+					</div>
+					
+					<!-- Payee Registered Address -->
+					<div t-attf-style="position: absolute; top: #{78 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; max-width: 210mm;">
+						<t t-esc="payee.contact_address_complete"/>
+					</div>
+					
+					<!-- Payee ZIP Code -->
+					<div t-attf-style="position: absolute; top: #{78 + offset_top}mm; left: #{243 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
+						<t t-esc="payee.zip or ''"/>
+					</div>
+
+					<!-- Part III - Payor Information -->
+					<t t-set="payor_vat" t-value="env['account.move'].x_slice_vat(payor.vat)"/>
+					
+					<!-- Payor TIN (4 boxes) -->
+					<div t-attf-style="position: absolute; top: #{105 + offset_top}mm; left: #{93 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
+						<t t-esc="payor_vat[0]"/>
+					</div>
+					<div t-attf-style="position: absolute; top: #{105 + offset_top}mm; left: #{116 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
+						<t t-esc="payor_vat[1]"/>
+					</div>
+					<div t-attf-style="position: absolute; top: #{105 + offset_top}mm; left: #{139 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
+						<t t-esc="payor_vat[2]"/>
+					</div>
+					<div t-attf-style="position: absolute; top: #{105 + offset_top}mm; left: #{163 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
+						<t t-esc="payor_vat[3]"/>
+					</div>
+
+					<!-- Payor Registered Name -->
+					<div t-attf-style="position: absolute; top: #{117 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; max-width: 230mm;">
+						<t t-esc="payor.name.replace('| Trade', '').strip()"/>
+					</div>
+					
+					<!-- Payor Registered Address -->
+					<div t-attf-style="position: absolute; top: #{130 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 11pt; max-width: 210mm;">
+						<t t-esc="payor.contact_address_complete"/>
+					</div>
+					
+					<!-- Payor ZIP Code -->
+					<div t-attf-style="position: absolute; top: #{130 + offset_top}mm; left: #{243 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
+						<t t-esc="payor.zip or ''"/>
+					</div>
+
+					<!-- Part III - Details of Income Payments and Taxes Withheld -->
 					<t t-if="len(values[0]) > 0">
-						<!-- <t t-set="quarter" t-value="env['account.move'].get_bir_month_num(month)"/> -->
 						<t t-set="processed" t-value="env['account.move'].process_2307_quarterly(values[0])"/>
-						<div class="container" style="padding-top:188.5mm;font-size:15px;padding-left:50px;width:100%; position: absolute;">
+						<div t-attf-style="position: absolute; top: #{155 + offset_top}mm; left: #{10 + offset_left}mm; width: 262mm; font-size: 10pt; line-height: 1.4;">
 							<t t-foreach="processed" t-as="val">
-								<!-- <t t-set="quarter" t-value="env['account.move'].get_bir_month_num(val[6])"/> -->
-								<div class="row">
-									<div style="width:270px;text-align:center;padding-top:6.5px;"><t t-esc='val["desc"]'/></div>
-
-									<div style="width:21mm;text-align:center;padding-top:6.5px;"><t t-esc='val["code"]'/></div>
-
-									<div style="width:35.5mm;text-align:center;padding-top:6.5px;"><t t-esc='"{:,}".format(round(val["m1"],2))'/></div>
-									<div style="width:36mm;text-align:center;padding-top:6.5px;"><t t-esc='"{:,}".format(round(val["m2"],2))'/></div>
-									<div style="width:35.5mm;text-align:center;padding-top:6.5px;"><t t-esc='"{:,}".format(round(val["m3"],2))'/></div>
-									<div style="width:35.5mm;text-align:center;padding-top:6.5px;"><t t-esc='"{:,}".format(round(val["m_total"],2))'/></div>
-
-									<div style="width:45mm;text-align:center;padding-top:6.5px;"><t t-esc='"{:,}".format(round(val["taxed"],2))'/></div>
-									
+								<div style="display: table; margin-bottom: 2.5mm;">
+									<!-- Nature of Income Payment -->
+									<div style="display: table-cell; width: 67mm; text-align: left; padding-left: 1.5mm; vertical-align: middle;">
+										<t t-esc='val["desc"]["en_US"]'/>
+									</div>
+									<!-- ATC -->
+									<div style="display: table-cell; width: 20mm; text-align: center; vertical-align: middle;">
+										<t t-esc='val["code"]'/>
+									</div>
+									<!-- 1st Month -->
+									<div style="display: table-cell; width: 32mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+										<t t-esc='"{:,.2f}".format(val["m1"])'/>
+									</div>
+									<!-- 2nd Month -->
+									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+										<t t-esc='"{:,.2f}".format(val["m2"])'/>
+									</div>
+									<!-- 3rd Month -->
+									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+										<t t-esc='"{:,.2f}".format(val["m3"])'/>
+									</div>
+									<!-- Total -->
+									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+										<t t-esc='"{:,.2f}".format(val["m_total"])'/>
+									</div>
+									<!-- Tax Withheld -->
+									<div style="display: table-cell; width: 36mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+										<t t-esc='"{:,.2f}".format(val["taxed"])'/>
+									</div>
 								</div>
 							</t>
+							<!-- TOTALS ROW -->
+							<t t-set="total_m1" t-value="sum([val['m1'] for val in processed])"/>
+							<t t-set="total_m2" t-value="sum([val['m2'] for val in processed])"/>
+							<t t-set="total_m3" t-value="sum([val['m3'] for val in processed])"/>
+							<t t-set="total_m_total" t-value="sum([val['m_total'] for val in processed])"/>
+							<t t-set="total_taxed" t-value="sum([val['taxed'] for val in processed])"/>
+							<div t-attf-style="position: absolute; top: #{56 + offset_top}mm; left: #{5 + offset_left}mm; width: 262mm; font-size: 10pt; line-height: 1.4;">
+								<div style="display: table; margin-bottom: 2.5mm;  padding-top: 2px; font-weight: bold;">
+									<!-- Nature of Income Payment -->
+									<div style="display: table-cell; width: 67mm; text-align: left; padding-left: 1.5mm; vertical-align: middle;">
+										<!-- TOTAL -->
+									</div>
+									<!-- ATC -->
+									<div style="display: table-cell; width: 20mm; text-align: center; vertical-align: middle;">
+									</div>
+									<!-- 1st Month Total -->
+									<div style="display: table-cell; width: 32mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+										<t t-esc='"{:,.2f}".format(total_m1)'/>
+									</div>
+									<!-- 2nd Month Total -->
+									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+										<t t-esc='"{:,.2f}".format(total_m2)'/>
+									</div>
+									<!-- 3rd Month Total -->
+									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+										<t t-esc='"{:,.2f}".format(total_m3)'/>
+									</div>
+									<!-- Grand Total -->
+									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+										<t t-esc='"{:,.2f}".format(total_m_total)'/>
+									</div>
+									<!-- Tax Withheld Total -->
+									<div style="display: table-cell; width: 36mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+										<t t-esc='"{:,.2f}".format(total_taxed)'/>
+									</div>
+								</div>
+							</div>
 						</div>
 					</t>
 				</div>

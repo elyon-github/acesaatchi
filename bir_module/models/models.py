@@ -79,10 +79,29 @@ class bir_reports(models.Model):
 
 
     def x_2307_forms(self, args):
-        return self.env.ref('bir_module.2307_report_action_id_multi').report_action(self, data={'name': 'BIR Form 2550M', 'month': args['month'], 'id': args['id'], 'trigger': args['trigger'], 'tranid': args['tranid']})
+        from urllib.parse import urlencode
+        search = args.get('search', '')
+        
+        # Build URL with search parameter
+        url_params = {
+            'id': args['id'],
+            'month': args['month'],
+            'trigger': args['trigger'],
+            'tranid': args['tranid'],
+            'search': search
+        }
+        
+        url = f"/report/pdf/bir_module.form_2307/?{urlencode(url_params)}"
+        
+        return {
+            'type': 'ir.actions.act_url',
+            'url': url,
+            'target': 'new',
+        }
 
     def x_get_2307_data(self, args):
         data = []
+        search = args[5] if len(args) > 5 else ""
 
         if args[2] == 'reprint':
             transactional = self._2307_query_reprint(args)
@@ -91,7 +110,7 @@ class bir_reports(models.Model):
         #     transactional = self._2307_query_ammend(args)
         #     data.append(transactional)
         else:
-            transactional = self._2307_query_normal(args)
+            transactional = self._2307_query_normal(args, search)
             data.append(transactional)
 
         if args[2] == 'table':
@@ -106,8 +125,8 @@ class bir_reports(models.Model):
         return data
 
     def _2307_query_reprint(self, args):
-        query = """ SELECT Abs(T1.price_total)*(Abs(T3.amount)/100), T1.price_total, T5.name, T5.vat, T4.name, T3.name,
-            T0.id, T0.move_type, T0.name, amount_total, T0.invoice_date, T5.id  
+        query = """ SELECT Abs(T1.price_subtotal)*(Abs(T3.amount)/100), T1.price_subtotal, T5.name, T5.vat, T4.name, T3.name,
+            T0.id, T0.move_type, T0.name, amount_total, amount_untaxed, T0.invoice_date, T5.id  
             FROM bir_module_print_history_line T6 
             JOIN account_move T0 ON T0.id = T6.move_id  
             JOIN account_move_line T1 ON T0.id = T1.move_id  
@@ -152,9 +171,9 @@ class bir_reports(models.Model):
 
     #     return val
 
-    def _2307_query_normal(self, args):
-        query = """ SELECT Abs(T1.price_total)*(Abs(T3.amount)/100), T1.price_total, T5.name, T5.vat, T4.name, T3.name,
-            T0.id, T0.move_type, T0.name, T0.amount_total {2} 
+    def _2307_query_normal(self, args, search=""):
+        query = """ SELECT Abs(T1.price_subtotal)*(Abs(T3.amount)/100), T1.price_subtotal, T5.name, T5.vat, T4.name, T3.name,
+            T0.id, T0.move_type, T0.name, T0.amount_total, T0.amount_untaxed, T0.invoice_date, T0.invoice_date_due, T0.payment_state {2} 
             FROM account_move T0 
             JOIN account_move_line T1 ON T0.id = T1.move_id  
             JOIN account_move_line_account_tax_rel T2 ON T1.id = T2.account_move_line_id 
@@ -164,7 +183,7 @@ class bir_reports(models.Model):
             {3} 
             WHERE T0.state='posted' AND T0.company_id = {0} AND T0.move_type = 'in_invoice' {1}"""
 
-        end_parameter = self._2307_params(trans=args[1], id=args[0])
+        end_parameter = self._2307_params(trans=args[1], id=args[0], search=search)
 
         self._cr.execute(query.format(self.env.company.id,
                          end_parameter[0], end_parameter[1], end_parameter[2]))
@@ -176,6 +195,7 @@ class bir_reports(models.Model):
         param = ""
         field = ""
         join = ""
+        search = kwargs.get('search', '')
 
         if kwargs['trans'] == "transactional":
             param = " AND T0.id = " + str(kwargs['id'][0])
@@ -189,6 +209,10 @@ class bir_reports(models.Model):
 
             field = ", T0.invoice_date, T6.id "
             join = "LEFT JOIN bir_module_print_history_line T6 ON T6.move_id = T0.id AND T6.form_type = '2307'"
+
+        # Add search filter for bill name if provided
+        if search:
+            param += " AND T0.name ILIKE '%" + search + "%'"
 
         return [param, field, join]
 
@@ -209,7 +233,7 @@ class bir_reports(models.Model):
 
             for dat in data:
                 if atc == dat[4]:
-                    month_num = self.get_bir_month_num(dat[10])
+                    month_num = self.get_bir_month_num(dat[11])  # Changed from dat[10] to dat[11] to get invoice_date
 
                     if month_num == '1':
                         dict['m1'] += dat[1]
@@ -274,10 +298,27 @@ class bir_reports(models.Model):
         for bp in temp_out:
             dict = []
             total = 0
+            untaxed = 0
+            bill_date = None
+            due_date = None
+            payment_state = "Unpaid"
             for dat in data[0]:
                 if bp == dat[6]:
                     total = dat[9]
-                    dict = [dat[6], dat[8], dat[7], total]
+                    untaxed = dat[10]  # amount_untaxed
+                    bill_date = dat[11]  # invoice_date
+                    due_date = dat[12]   # invoice_date_due
+                    payment_state = dat[13]  # payment_state
+                    # Normalize payment_state display
+                    if payment_state == 'paid':
+                        payment_state = 'Paid'
+                    elif payment_state == 'not_paid':
+                        payment_state = 'Unpaid'
+                    elif payment_state == 'in_payment':
+                        payment_state = 'In Payment'
+                    else:
+                        payment_state = 'Unpaid'
+                    dict = [dat[6], dat[8], dat[7], untaxed, total, bill_date, due_date, payment_state]
             final.append(dict)
 
         return final
@@ -535,12 +576,12 @@ class bir_reports(models.Model):
     def sawt_map_params(self, param, year):
         append = ""
         if param[0] == "monthly":
-            append = "EXTRACT(MONTH FROM T0.date) = " + \
+            append = "EXTRACT(MONTH FROM T0.invoice_date) = " + \
                 str(param[1]) + \
-                " AND EXTRACT(YEAR FROM T0.date) = " + str(year)
+                " AND EXTRACT(YEAR FROM T0.invoice_date) = " + str(year)
         else:
-            append = "EXTRACT(MONTH FROM T0.date) >= " + str(param[0]) + "  AND EXTRACT(MONTH FROM T0.date) <= " + str(
-                param[1]) + " AND EXTRACT(YEAR FROM T0.date) = " + str(year)
+            append = "EXTRACT(MONTH FROM T0.invoice_date) >= " + str(param[0]) + "  AND EXTRACT(MONTH FROM T0.invoice_date) <= " + str(
+                param[1]) + " AND EXTRACT(YEAR FROM T0.invoice_date) = " + str(year)
         return append
 
     def export_sawt_map(self, month, report):
@@ -916,26 +957,88 @@ class bir_reports(models.Model):
         return str(quarter)
 
     def get_bir_month_num(self, value):
-        quarter = 0
-        month = self.splice_month(str(value))
-
-        if int(month[1]) == 4 or int(month[1]) == 1 or int(month[1]) == 7 or int(month[1]) == 10:
-            quarter = 1
-        elif int(month[1]) == 2 or int(month[1]) == 5 or int(month[1]) == 8 or int(month[1]) == 11:
-            quarter = 2
+        if not value:
+            return '1'  # Default to first quarter month if no value
+        
+        import datetime
+        import logging
+        _logger = logging.getLogger(__name__)
+        
+        # Extract month number from the value
+        month_int = None
+        
+        # If it's a date object, get month directly
+        if hasattr(value, 'month'):
+            month_int = value.month
         else:
+            # Convert to string and try to parse
+            value_str = str(value).strip()
+            
+            # Try to extract month from various date formats
+            try:
+                # Format: YYYY-MM-DD
+                if '-' in value_str:
+                    parts = value_str.split('-')
+                    if len(parts) >= 2:
+                        month_int = int(parts[1])
+                # Format: YYYY/MM/DD
+                elif '/' in value_str:
+                    parts = value_str.split('/')
+                    if len(parts) >= 2:
+                        month_int = int(parts[1])
+                # Format: MM/DD/YYYY
+                elif len(value_str) == 10 and '/' in value_str:
+                    parts = value_str.split('/')
+                    month_int = int(parts[0])
+            except (ValueError, IndexError, AttributeError) as e:
+                _logger.warning(f"Failed to extract month from {value}: {e}")
+                pass
+        
+        # If we couldn't extract month, default to 1
+        if month_int is None:
+            _logger.warning(f"Could not determine month from value: {value}, defaulting to 1")
+            return '1'
+        
+        _logger.info(f"Processing date {value}, extracted month: {month_int}")
+        
+        # Determine quarter position based on month
+        if month_int == 1 or month_int == 4 or month_int == 7 or month_int == 10:
             quarter = 1
+        elif month_int == 2 or month_int == 5 or month_int == 8 or month_int == 11:
+            quarter = 2
+        else:  # months 3, 6, 9, 12
+            quarter = 3
 
+        _logger.info(f"Calculated quarter {quarter} for month {month_int}")
         return str(quarter)
 
     def splice_month(self, month):
-        return month.replace("-", " ").split()
+        if not month:
+            return ['0', '1']  # Return default year and month
+        
+        # Handle date objects by converting to string
+        month_str = str(month)
+        
+        # Replace common date separators and split
+        parts = month_str.replace("-", " ").replace("/", " ").split()
+        
+        # If we got date parts, return first 2 elements (year and month)
+        if len(parts) >= 2:
+            return parts[:2]
+        elif len(parts) == 1:
+            return ['0', parts[0]]  # If only one element, assume it's the month
+        else:
+            return ['0', '1']  # Return defaults if we couldn't parse
 
     def get_marker_quarter(self, month):
         return self.x_2550_qrtrs(self.splice_month(month))
 
     def fetch_period_dates(self, value):
         vals = self.splice_month(value)
+        
+        # Ensure we have the required elements in vals
+        if len(vals) < 2:
+            raise ValueError(f"Invalid month format. Expected 'YYYY-MM' but got '{value}'")
 
         month = self.x_2550_qrtrs(vals)
 
@@ -989,10 +1092,9 @@ class bir_reports(models.Model):
         val = []
         if vat != False:
             if vat[3] == "-":
-                val = [vat[:3], vat[4:7], vat[8:], '000']
+                val = [vat[:3], vat[4:7], vat[8:11], vat[12:15]]  # Extract actual last segment
             else:
-                val = [vat[:3], vat[3:6], vat[6:], '000']
-
+                val = [vat[:3], vat[3:6], vat[6:9], vat[9:12]]  # Extract actual last segment
         return val
 
     def x_fetch_company_id(self):
