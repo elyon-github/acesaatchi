@@ -2,207 +2,270 @@
 <templates xml:space="preserve">
 
     <t t-name="bir_module.form_2307_page" owl="1">
-        <div class="col-md-12" t-ref="root">
-            <h2 style="color:#8f8f8f; padding-top:10px">BIR Form 2307</h2>
-            <div class="row">
-                <div class="col-md-2">
-                    <div class="row">
-                        <div class="col-md-3">
-                            <input type="button" 
-                                   id="print_2307" 
-                                   value="Print" 
-                                   class="btn btn-success"
-                                   t-on-click="onPrint2307"/>
+        <div class="col-md-12 bir-page-container" t-ref="root">
+            <div class="bir-header">
+                <h2 class="bir-title">BIR Form 2307</h2>
+            </div>
+            
+            <div class="bir-controls-section">
+                <div class="bir-controls-row">
+                    <div class="bir-control-group">
+                        <label for="month_2307" class="bir-control-label">Taxable Month/Year</label>
+                        <input type="date" 
+                               id="month_2307" 
+                               class="month_2307 bir-form-control"
+                               t-att-value="state.currentMonth + '-01'"
+                               t-on-change="onMonthChange"
+                               placeholder="Select month"/>
+                    </div>
+                    
+                    <div class="bir-control-group bir-partner-search-wrapper">
+                        <label for="partner_2307" class="bir-control-label">Partner</label>
+                        <div class="bir-partner-input-container">
+                            <input type="text" 
+                                   id="partner_2307" 
+                                   class="bir-form-control bir-partner-search-input"
+                                   placeholder="Search partner by name or ID"
+                                   t-on-input="onPartnerSearch"
+                                   autocomplete="off"/>
+                            <div id="partner_2307_dropdown" class="bir-partner-dropdown"></div>
                         </div>
+                        <input type="hidden" id="partner_2307_id" class="partner-id-field"/>
+                    </div>
+                    
+                    <div class="bir-control-group">
+                        <button type="button" 
+                                id="print_2307" 
+                                class="btn btn-primary bir-btn-print"
+                                t-on-click="onPrint2307">
+                            <i class="fa fa-print"></i> Print
+                        </button>
                     </div>
                 </div>
-                <div class="col-md-2">
-                    <input type="month" 
-                           id="month_2307" 
-                           class="month_2307"
-                           t-att-value="state.currentMonth"
-                           t-on-keypress="onMonthKeypress"/>
-                </div>
-                <div class="col-md-1 form-group">
-                    <select class="form-control select_dropdown" 
-                            id="partner_2307"
-                            t-on-change="onPartnerChange">
-                    </select>
-                </div>
             </div>
-            <div class="row">
-                <div class="col-sm-5">
+            
+            <div class="bir-content-section">
+                <div class="bir-data-table">
                     <div id="ammend_table_2307"/>
                 </div>
-                <div class="col-md-7">
-                    <iframe id="preview_2307" style="height:700px" width="100%"></iframe>
+                <div class="bir-preview-panel">
+                    <iframe id="preview_2307" class="bir-preview-iframe"></iframe>
                 </div>
             </div>
         </div>
     </t>
 
     <t t-name="bir_module.form_2550M_page" owl="1">
-        <div class="col-md-12" t-ref="root">
-            <h2 style="color:#8f8f8f; padding-top:10px">BIR Form 2550M</h2>
-            <div class="row">
-                <div class="col-md-2">
-                    <div class="row">
-                        <div class="col-md-3">
-                            <input type="button" 
-                                   id="print_2550M" 
-                                   value="Print" 
-                                   class="btn btn-success"
-                                   t-on-click="onPrint2550M"/>
-                        </div>
-                        <div class="col-md-6">
-                            <input type="button" 
-                                   id="apply_2550M_exclude" 
-                                   value="Preview&#10;Excluded" 
-                                   class="btn btn-danger"
-                                   t-on-click="onApply2550MExclude"/>
-                        </div>
+        <div class="col-md-12 bir-page-container" t-ref="root">
+            <div class="bir-header">
+                <h2 class="bir-title">BIR Form 2550M</h2>
+            </div>
+            
+            <div class="bir-controls-section">
+                <div class="bir-controls-row">
+                    <div class="bir-control-group">
+                        <label for="month_2550M" class="bir-control-label">Taxable Month/Year</label>
+                        <input type="date" 
+                               id="month_2550M" 
+                               class="month_2550M bir-form-control"
+                               t-att-value="state.currentMonth + '-01'"
+                               t-on-change="onMonthChange"
+                               placeholder="Select month"/>
+                    </div>
+                    
+                    <div class="bir-control-group bir-button-group">
+                        <button type="button" 
+                                id="print_2550M" 
+                                class="btn btn-primary bir-btn-print"
+                                t-on-click="onPrint2550M">
+                            <i class="fa fa-print"></i> Print
+                        </button>
+                        <button type="button" 
+                                id="apply_2550M_exclude" 
+                                class="btn btn-warning bir-btn-secondary"
+                                t-on-click="onApply2550MExclude">
+                            <i class="fa fa-eye"></i> Preview Excluded
+                        </button>
                     </div>
                 </div>
-                <div class="col-md-2">
-                    <input type="month" 
-                           id="month_2550M" 
-                           class="month_2550M"
-                           t-att-value="state.currentMonth"
-                           t-on-keypress="onMonthKeypress"/>
-                </div>
             </div>
-            <div class="row">
-                <div class="col-sm-5">
+            
+            <div class="bir-content-section">
+                <div class="bir-data-table">
                     <div id="ammend_table_2550M"/>
                 </div>
-                <div class="col-md-7">
-                    <iframe id="preview_2550M" style="height:700px" width="100%"></iframe>
+                <div class="bir-preview-panel">
+                    <iframe id="preview_2550M" class="bir-preview-iframe"></iframe>
                 </div>
             </div>
         </div>
     </t>
 
     <t t-name="bir_module.form_2550Q_page" owl="1">
-        <div class="col-md-12" t-ref="root">
-            <h2 style="color:#8f8f8f; padding-top:10px">BIR Form 2550Q</h2>
-            <div class="row">
-                <div class="col-md-2">
-                    <input type="button" 
-                           id="print_2550Q" 
-                           value="Print" 
-                           class="btn btn-success"
-                           t-on-click="onPrint2550Q"/>
-                </div>
-                <div class="col-md-2">
-                    <input type="month" 
-                           id="month_2550Q" 
-                           class="month_2550Q"
-                           t-att-value="state.currentMonth"
-                           t-on-keypress="onMonthKeypress"/>
+        <div class="col-md-12 bir-page-container" t-ref="root">
+            <div class="bir-header">
+                <h2 class="bir-title">BIR Form 2550Q</h2>
+            </div>
+            
+            <div class="bir-controls-section">
+                <div class="bir-controls-row">
+                    <div class="bir-control-group">
+                        <label for="month_2550Q" class="bir-control-label">Taxable Month/Year</label>
+                        <input type="date" 
+                               id="month_2550Q" 
+                               class="month_2550Q bir-form-control"
+                               t-att-value="state.currentMonth + '-01'"
+                               t-on-change="onMonthChange"
+                               placeholder="Select month"/>
+                    </div>
+                    
+                    <div class="bir-control-group">
+                        <button type="button" 
+                                id="print_2550Q" 
+                                class="btn btn-primary bir-btn-print"
+                                t-on-click="onPrint2550Q">
+                            <i class="fa fa-print"></i> Print
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div class="row">
-                <div class="col-sm-5">
-                    <div id="ammend_table_2550Q"/>
-                </div>
-                <div class="col-md-7">
-                    <iframe id="preview_2550Q" style="height:700px" width="100%"></iframe>
+            
+            <div class="bir-content-section">
+                <div class="bir-preview-panel bir-preview-full">
+                    <iframe id="preview_2550Q" class="bir-preview-iframe"></iframe>
                 </div>
             </div>
         </div>
     </t>
 
     <t t-name="bir_module.form_1601e_page" owl="1">
-        <div class="col-md-12" t-ref="root">
-            <h2 style="color:#8f8f8f; padding-top:10px">BIR Form 1601E</h2>
-            <div class="row">
-                <div class="col-md-2">
-                    <input type="button" 
-                           id="print_1601e" 
-                           value="Print" 
-                           class="btn btn-success"
-                           t-on-click="onPrint1601e"/>
-                </div>
-                <div class="col-md-2">
-                    <input type="month" 
-                           id="month_1601e" 
-                           class="month_1601e"
-                           t-att-value="state.currentMonth"
-                           t-on-keypress="onMonthKeypress"/>
+        <div class="col-md-12 bir-page-container" t-ref="root">
+            <div class="bir-header">
+                <h2 class="bir-title">BIR Form 1601E</h2>
+            </div>
+            
+            <div class="bir-controls-section">
+                <div class="bir-controls-row">
+                    <div class="bir-control-group">
+                        <label for="month_1601e" class="bir-control-label">Taxable Month/Year</label>
+                        <input type="date" 
+                               id="month_1601e" 
+                               class="month_1601e bir-form-control"
+                               t-att-value="state.currentMonth + '-01'"
+                               t-on-change="onMonthChange"
+                               placeholder="Select month"/>
+                    </div>
+                    
+                    <div class="bir-control-group">
+                        <button type="button" 
+                                id="print_1601e" 
+                                class="btn btn-primary bir-btn-print"
+                                t-on-click="onPrint1601e">
+                            <i class="fa fa-print"></i> Print
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div class="row">
-                <div class="col-sm-1"></div>
-                <div class="col-md-10">
-                    <iframe id="preview_1601e" style="height:700px" width="100%"></iframe>
+            
+            <div class="bir-content-section">
+                <div class="bir-preview-panel bir-preview-full">
+                    <iframe id="preview_1601e" class="bir-preview-iframe"></iframe>
                 </div>
             </div>
         </div>
     </t>
 
     <t t-name="bir_module.sawt_report" owl="1">
-        <div class="col-md-12" t-ref="root">
-            <h2 style="color:#8f8f8f; padding-top:10px">Summary Alphalist of Withholding Tax</h2>
-            <div class="row">
-                <div class="col-md-2">
-                    <input type="button" 
-                           id="export_sawt" 
-                           value="Export xlsx" 
-                           class="btn btn-success"
-                           t-on-click="onExportSawt"/>
-                    <input type="button" 
-                           id="export_sawt_csv" 
-                           value="Export csv" 
-                           class="btn btn-success"
-                           t-on-click="onExportSawtCsv"/>
-                </div>
-                <div class="col-md-2">
-                    <input type="month" 
-                           id="sawt_param" 
-                           class="sawt_param monthpicker"
-                           t-att-value="state.currentMonth"
-                           t-on-keypress="onSawtParamKeypress"/>
+        <div class="col-md-12 bir-page-container" t-ref="root">
+            <div class="bir-header">
+                <h2 class="bir-title">Summary Alphalist of Withholding Tax</h2>
+            </div>
+            
+            <div class="bir-controls-section">
+                <div class="bir-controls-row">
+                    <div class="bir-control-group">
+                        <label for="sawt_param" class="bir-control-label">Taxable Month/Year</label>
+                        <input type="date" 
+                               id="sawt_param" 
+                               class="sawt_param monthpicker bir-form-control"
+                               t-att-value="state.currentMonth + '-01'"
+                               t-on-change="onMonthChange"
+                               placeholder="Select month"/>
+                    </div>
+                    
+                    <div class="bir-control-group bir-button-group">
+                        <button type="button" 
+                                id="export_sawt" 
+                                class="btn btn-success bir-btn-export"
+                                t-on-click="onExportSawt">
+                            <i class="fa fa-download"></i> Export XLSX
+                        </button>
+                        <button type="button" 
+                                id="export_sawt_csv" 
+                                class="btn btn-info bir-btn-secondary"
+                                t-on-click="onExportSawtCsv">
+                            <i class="fa fa-download"></i> Export CSV
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div id="sawt_table" class="sawt_table"></div>
+            
+            <div class="bir-content-section">
+                <div id="sawt_table" class="sawt_table bir-table-container"></div>
+            </div>
         </div>
     </t>
 
     <t t-name="bir_module.print_history" owl="1">
-        <div class="col-md-12" t-ref="root">
-            <h2 style="color:#8f8f8f; padding-top:10px">BIR Report Print History</h2>
-            <div class="row">
-                <div class="col-md-1 form-group">
-                    <select class="form-control select_dropdown" 
-                            id="print_type"
-                            t-on-change="onPrintTypeChange">
-                    </select>
-                </div>
+        <div class="col-md-12 bir-page-container" t-ref="root">
+            <div class="bir-header">
+                <h2 class="bir-title">BIR Report Print History</h2>
             </div>
-            <div id="print_history" class="print_history"></div>
-        </div>
-
-        <div class="modal fade" id="print_details_modal" tabindex="-1" role="dialog">
-            <div class="modal-dialog modal-lg" role="document">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">History Details</h5>
-                    </div>
-                    <div class="modal-body">
-                        <div id="print_details"></div>
+            
+            <div class="bir-controls-section">
+                <div class="bir-controls-row">
+                    <div class="bir-control-group">
+                        <label for="print_type" class="bir-control-label">Report Type</label>
+                        <select class="form-control select_dropdown bir-form-control" 
+                                id="print_type"
+                                t-on-change="onPrintTypeChange">
+                        </select>
                     </div>
                 </div>
             </div>
-        </div>
+            
+            <div class="bir-content-section">
+                <div id="print_history" class="print_history bir-table-container"></div>
+            </div>
 
-        <div class="modal fade" id="print_preview_modal" tabindex="-1" role="dialog">
-            <div class="modal-dialog modal-lg" role="document">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Preview</h5>
+            <div class="modal fade" id="print_details_modal" tabindex="-1" role="dialog">
+                <div class="modal-dialog modal-lg" role="document">
+                    <div class="modal-content">
+                        <div class="modal-header bir-modal-header">
+                            <h5 class="modal-title">History Details</h5>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                <span aria-hidden="true">&#215;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="print_details"></div>
+                        </div>
                     </div>
-                    <div class="modal-body">
-                        <iframe id="print_preview_frame" style="height:700px" width="100%"></iframe>
+                </div>
+            </div>
+
+            <div class="modal fade" id="print_preview_modal" tabindex="-1" role="dialog">
+                <div class="modal-dialog modal-lg" role="document">
+                    <div class="modal-content">
+                        <div class="modal-header bir-modal-header">
+                            <h5 class="modal-title">Preview</h5>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                <span aria-hidden="true">&#215;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <iframe id="print_preview_frame" class="bir-preview-iframe"></iframe>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -210,76 +273,113 @@
     </t>
 
     <t t-name="bir_module.map_report" owl="1">
-        <div class="col-md-12" t-ref="root">
-            <h2 style="color:#8f8f8f; padding-top:10px">Monthly Alphalist of Payees</h2>
-            <div class="row">
-                <div class="col-md-2">
-                    <input type="button" 
-                           id="export_map" 
-                           value="Export xlsx" 
-                           class="btn btn-success"
-                           t-on-click="onExportMap"/>
-                    <input type="button" 
-                           id="export_map_csv" 
-                           value="Export csv" 
-                           class="btn btn-success"
-                           t-on-click="onExportMapCsv"/>
-                </div>
-                <div class="col-md-2">
-                    <input type="month" 
-                           id="map_param" 
-                           class="map_param"
-                           t-att-value="state.currentMonth"
-                           t-on-keypress="onMapParamKeypress"/>
+        <div class="col-md-12 bir-page-container" t-ref="root">
+            <div class="bir-header">
+                <h2 class="bir-title">Monthly Alphalist of Payees</h2>
+            </div>
+            
+            <div class="bir-controls-section">
+                <div class="bir-controls-row">
+                    <div class="bir-control-group">
+                        <label for="map_param" class="bir-control-label">Taxable Month/Year</label>
+                        <input type="date" 
+                               id="map_param" 
+                               class="map_param bir-form-control"
+                               t-att-value="state.currentMonth + '-01'"
+                               t-on-change="onMonthChange"
+                               placeholder="Select month"/>
+                    </div>
+                    
+                    <div class="bir-control-group bir-button-group">
+                        <button type="button" 
+                                id="export_map" 
+                                class="btn btn-success bir-btn-export"
+                                t-on-click="onExportMap">
+                            <i class="fa fa-download"></i> Export XLSX
+                        </button>
+                        <button type="button" 
+                                id="export_map_csv" 
+                                class="btn btn-info bir-btn-secondary"
+                                t-on-click="onExportMapCsv">
+                            <i class="fa fa-download"></i> Export CSV
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div id="map_table" class="map_table"></div>
+            
+            <div class="bir-content-section">
+                <div id="map_table" class="map_table bir-table-container"></div>
+            </div>
         </div>
     </t>
 
     <t t-name="bir_module.slp_report" owl="1">
-        <div class="col-md-12" t-ref="root">
-            <h2 style="color:#8f8f8f; padding-top:10px">Summary List of Purchases</h2>
-            <div class="row">
-                <div class="col-md-2">
-                    <input type="button" 
-                           id="export_slp" 
-                           value="Export xlsx" 
-                           class="btn btn-success"
-                           t-on-click="onExportSlp"/>
-                </div>
-                <div class="col-md-2">
-                    <input type="month" 
-                           id="slp_param" 
-                           class="slp_param"
-                           t-att-value="state.currentMonth"
-                           t-on-keypress="onSlpParamKeypress"/>
+        <div class="col-md-12 bir-page-container" t-ref="root">
+            <div class="bir-header">
+                <h2 class="bir-title">Summary List of Purchases</h2>
+            </div>
+            
+            <div class="bir-controls-section">
+                <div class="bir-controls-row">
+                    <div class="bir-control-group">
+                        <label for="slp_param" class="bir-control-label">Taxable Month/Year</label>
+                        <input type="date" 
+                               id="slp_param" 
+                               class="slp_param bir-form-control"
+                               t-att-value="state.currentMonth + '-01'"
+                               t-on-change="onMonthChange"
+                               placeholder="Select month"/>
+                    </div>
+                    
+                    <div class="bir-control-group">
+                        <button type="button" 
+                                id="export_slp" 
+                                class="btn btn-success bir-btn-export"
+                                t-on-click="onExportSlp">
+                            <i class="fa fa-download"></i> Export XLSX
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div id="slp_table" class="slp_table"></div>
+            
+            <div class="bir-content-section">
+                <div id="slp_table" class="slp_table bir-table-container"></div>
+            </div>
         </div>
     </t>
 
     <t t-name="bir_module.sls_report" owl="1">
-        <div class="col-md-12" t-ref="root">
-            <h2 style="color:#8f8f8f; padding-top:10px">Summary List of Sales</h2>
-            <div class="row">
-                <div class="col-md-2">
-                    <input type="button" 
-                           id="export_sls" 
-                           value="Export xlsx" 
-                           class="btn btn-success"
-                           t-on-click="onExportSls"/>
-                </div>
-                <div class="col-md-2">
-                    <input type="month" 
-                           id="sls_param" 
-                           class="sls_param"
-                           t-att-value="state.currentMonth"
-                           t-on-keypress="onSlsParamKeypress"/>
+        <div class="col-md-12 bir-page-container" t-ref="root">
+            <div class="bir-header">
+                <h2 class="bir-title">Summary List of Sales</h2>
+            </div>
+            
+            <div class="bir-controls-section">
+                <div class="bir-controls-row">
+                    <div class="bir-control-group">
+                        <label for="sls_param" class="bir-control-label">Taxable Month/Year</label>
+                        <input type="date" 
+                               id="sls_param" 
+                               class="sls_param bir-form-control"
+                               t-att-value="state.currentMonth + '-01'"
+                               t-on-change="onMonthChange"
+                               placeholder="Select month"/>
+                    </div>
+                    
+                    <div class="bir-control-group">
+                        <button type="button" 
+                                id="export_sls" 
+                                class="btn btn-success bir-btn-export"
+                                t-on-click="onExportSls">
+                            <i class="fa fa-download"></i> Export XLSX
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div id="sls_table" class="sls_table"></div>
+            
+            <div class="bir-content-section">
+                <div id="sls_table" class="sls_table bir-table-container"></div>
+            </div>
         </div>
     </t>
 

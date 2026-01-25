@@ -143,23 +143,23 @@
 										<t t-esc='val["code"]'/>
 									</div>
 									<!-- 1st Month -->
-									<div style="display: table-cell; width: 32mm; text-align: right; padding-right: 1.5mm; vertical-align: middle; border: 1px solid red">
+									<div style="display: table-cell; width: 32mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
 										<t t-esc='"{:,.2f}".format(val["m1"])'/>
 									</div>
 									<!-- 2nd Month -->
-									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle; border: 1px solid red">
+									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
 										<t t-esc='"{:,.2f}".format(val["m2"])'/>
 									</div>
 									<!-- 3rd Month -->
-									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle; border: 1px solid red">
+									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
 										<t t-esc='"{:,.2f}".format(val["m3"])'/>
 									</div>
 									<!-- Total -->
-									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle; border: 1px solid red">
+									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
 										<t t-esc='"{:,.2f}".format(val["m_total"])'/>
 									</div>
 									<!-- Tax Withheld -->
-									<div style="display: table-cell; width: 36mm; text-align: right; padding-right: 1.5mm; vertical-align: middle; border: 1px solid red">
+									<div style="display: table-cell; width: 36mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
 										<t t-esc='"{:,.2f}".format(val["taxed"])'/>
 									</div>
 								</div>

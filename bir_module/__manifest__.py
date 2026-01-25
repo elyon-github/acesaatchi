@@ -5,7 +5,7 @@
     'description': """
         Long description of module's purpose
     """,
-    'author': "Jerome Campana, Elyon Solutions International Inc.",
+    'author': "Mark Angelo Templanza, Elyon Solutions International Inc.",
     'website': "www.elyon-solutions.com",
     'category': 'Accounting',
     'version': '18.0.1.1',

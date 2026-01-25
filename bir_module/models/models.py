@@ -154,7 +154,7 @@ class bir_reports(models.Model):
 
     def _2307_query_normal(self, args):
         query = """ SELECT Abs(T1.price_total)*(Abs(T3.amount)/100), T1.price_total, T5.name, T5.vat, T4.name, T3.name,
-            T0.id, T0.move_type, T0.name, T0.amount_total {2} 
+            T0.id, T0.move_type, T0.name, T0.amount_total, T0.invoice_date, T0.invoice_date_due, T0.payment_state {2} 
             FROM account_move T0 
             JOIN account_move_line T1 ON T0.id = T1.move_id  
             JOIN account_move_line_account_tax_rel T2 ON T1.id = T2.account_move_line_id 
@@ -274,10 +274,25 @@ class bir_reports(models.Model):
         for bp in temp_out:
             dict = []
             total = 0
+            bill_date = None
+            due_date = None
+            payment_state = "Unpaid"
             for dat in data[0]:
                 if bp == dat[6]:
                     total = dat[9]
-                    dict = [dat[6], dat[8], dat[7], total]
+                    bill_date = dat[10]  # invoice_date
+                    due_date = dat[11]   # invoice_date_due
+                    payment_state = dat[12]  # payment_state
+                    # Normalize payment_state display
+                    if payment_state == 'paid':
+                        payment_state = 'Paid'
+                    elif payment_state == 'not_paid':
+                        payment_state = 'Unpaid'
+                    elif payment_state == 'in_payment':
+                        payment_state = 'In Payment'
+                    else:
+                        payment_state = 'Unpaid'
+                    dict = [dat[6], dat[8], dat[7], total, bill_date, due_date, payment_state]
             final.append(dict)
 
         return final
