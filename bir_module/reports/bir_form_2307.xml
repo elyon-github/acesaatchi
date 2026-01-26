@@ -83,12 +83,12 @@
 					</div>
 
 					<!-- Payee Registered Name -->
-					<div t-attf-style="position: absolute; top: #{65 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; max-width: 230mm; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word;">
+					<div t-attf-style="position: absolute; top: #{65 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; white-space: nowrap;">
 						<t t-esc="payee.name.replace('| Trade', '').strip()"/>
 					</div>
 					
 					<!-- Payee Registered Address -->
-					<div t-attf-style="position: absolute; top: #{78 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; max-width: 210mm;">
+					<div t-attf-style="position: absolute; top: #{78 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; white-space: nowrap;">
 						<t t-esc="payee.contact_address_complete"/>
 					</div>
 					
@@ -115,12 +115,12 @@
 					</div>
 
 					<!-- Payor Registered Name -->
-					<div t-attf-style="position: absolute; top: #{117 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; max-width: 230mm; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word;">
+					<div t-attf-style="position: absolute; top: #{117 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; white-space: nowrap;">
 						<t t-esc="payor.name.replace('| Trade', '').strip()"/>
 					</div>
 					
 					<!-- Payor Registered Address -->
-					<div t-attf-style="position: absolute; top: #{130 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 11pt; max-width: 210mm;">
+					<div t-attf-style="position: absolute; top: #{130 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 11pt; white-space: nowrap;">
 						<t t-esc="payor.contact_address_complete"/>
 					</div>
 					
