@@ -83,7 +83,7 @@
 					</div>
 
 					<!-- Payee Registered Name -->
-					<div t-attf-style="position: absolute; top: #{65 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt;">
+					<div t-attf-style="position: absolute; top: #{65 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; max-width: 230mm; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word;">
 						<t t-esc="payee.name.replace('| Trade', '').strip()"/>
 					</div>
 					
@@ -115,7 +115,7 @@
 					</div>
 
 					<!-- Payor Registered Name -->
-					<div t-attf-style="position: absolute; top: #{117 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; max-width: 230mm;">
+					<div t-attf-style="position: absolute; top: #{117 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; max-width: 230mm; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word;">
 						<t t-esc="payor.name.replace('| Trade', '').strip()"/>
 					</div>
 					
