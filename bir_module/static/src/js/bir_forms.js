@@ -190,9 +190,7 @@ export class Form2307 extends Component {
     if (ammendTable) {
       ammendTable.innerHTML = construct_ammendment_no_action(data);
       if (window.jQuery) {
-        const table = window.jQuery("#bir_ammend_table").DataTable({
-          searching: false
-        });
+        window.jQuery("#bir_ammend_table").DataTable();
         window.jQuery(".dataTables_length").addClass("bs-select");
       }
     }

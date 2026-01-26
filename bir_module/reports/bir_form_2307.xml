@@ -83,7 +83,7 @@
 					</div>
 
 					<!-- Payee Registered Name -->
-					<div t-attf-style="position: absolute; top: #{65 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; max-width: 230mm;">
+					<div t-attf-style="position: absolute; top: #{65 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt;">
 						<t t-esc="payee.name.replace('| Trade', '').strip()"/>
 					</div>
 					
