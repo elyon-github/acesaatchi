@@ -11,6 +11,19 @@ import {
 } from "./bir_utils";
 
 // Form 2307 Component
+/**
+ * BIR Form 2307 - Certificate of Creditable Tax Withheld at Source
+ * Handles the main form interface including:
+ * - Partner selection with search
+ * - Month/period selection
+ * - Invoice record table with checkbox selection
+ * - Real-time PDF preview with filtered data based on selected records
+ * 
+ * Checkbox Feature:
+ * - When checkboxes are selected, ONLY those records are rendered in preview/print
+ * - When NO checkboxes are selected, ALL records are rendered (default behavior)
+ * - Selected IDs are passed via URL to the backend for SQL filtering
+ */
 export class Form2307 extends Component {
   static template = "bir_module.form_2307_page";
 
@@ -19,16 +32,20 @@ export class Form2307 extends Component {
     this.action = useService("action");
     this.rootRef = useRef("root");
 
+    // Component state for managing form and UI
     this.state = useState({
       currentMonth: get_current(),
       selectedPartner: 0,
       partnersList: [],
       filteredPartners: [],
       searchTerm: "",
+      checkedIds: new Set(), // Track which records are selected via checkboxes
     });
 
     onMounted(async () => {
       await this.loadInitialData();
+      // Attach load listener to show/hide loading animation when preview updates
+      this.attachPreviewLoadListener();
     });
   }
 
@@ -114,6 +131,9 @@ export class Form2307 extends Component {
       searchInput.value = "";
     }
 
+    // Clear checked IDs when partner changes
+    this.state.checkedIds = new Set();
+
     const dropdown = this.rootRef.el.querySelector("#partner_2307_dropdown");
     dropdown.classList.remove("active");
 
@@ -139,16 +159,18 @@ export class Form2307 extends Component {
     const current = monthInput ? monthInput.value : this.state.currentMonth;
     const BP = this.state.selectedPartner;
     const search = this.state.searchTerm || "";
+    const checkedIds = Array.from(this.state.checkedIds);
 
     const data = await this.orm.call("account.move", "x_2307_forms", [
       "",
-      { month: current, id: BP, trigger: "print", tranid: "none", search: search },
+      { month: current, id: BP, trigger: "print", tranid: "none", search: search, checked_ids: checkedIds },
     ]);
     this.action.doAction(data);
   }
 
   onMonthChange(ev) {
     this.state.searchTerm = ""; // Clear search when month changes
+    this.state.checkedIds = new Set(); // Clear checked IDs when month changes
     const searchInput = this.rootRef.el.querySelector("#search_2307");
     if (searchInput) {
       searchInput.value = "";
@@ -168,31 +190,208 @@ export class Form2307 extends Component {
     const BP = this.state.selectedPartner;
     const search = this.state.searchTerm || "";
 
-    const url =
-      "/report/pdf/bir_module.form_2307/?id=" +
-      BP +
-      "&month=" +
-      current +
-      "&search=" +
-      encodeURIComponent(search) +
-      "&trigger=view";
-    const previewFrame = this.rootRef.el.querySelector("#preview_2307");
-    if (previewFrame) {
-      previewFrame.src = url;
-    }
-
+    // Load table with ALL records (search filtered, but not checkbox filtered)
+    // Checkboxes are for selecting which records to include in the PDF/preview
     const data = await this.orm.call("account.move", "x_get_2307_data", [
       "",
-      [[BP, current], "not_transactional", "table", "2307-Quarterly", "none", search],
+      [[BP, current], "not_transactional", "table", "2307-Quarterly", "none", search, []],
     ]);
 
     const ammendTable = this.rootRef.el.querySelector("#ammend_table_2307");
     if (ammendTable) {
       ammendTable.innerHTML = construct_ammendment_no_action(data);
       if (window.jQuery) {
-        window.jQuery("#bir_ammend_table").DataTable();
+        window.jQuery("#bir_ammend_table").DataTable({
+          searching: false
+        });
         window.jQuery(".dataTables_length").addClass("bs-select");
       }
+      
+      // Add event listeners for checkboxes (using event delegation)
+      this.attachCheckboxEventDelegation();
+      // Restore checkbox states from previous selections
+      this.restoreCheckboxStates();
+    }
+    
+    // Update preview with current selections after table is loaded
+    this.updatePreviewOnly();
+  }
+
+  /**
+   * Attaches event delegation listener for checkbox changes
+   * Uses event delegation so we don't need to re-attach when table is redrawn
+   * Handles both individual checkboxes and "select all" checkbox
+   */
+  attachCheckboxEventDelegation() {
+    const ammendTable = this.rootRef.el.querySelector("#ammend_table_2307");
+    
+    // Remove old delegation listener if it exists
+    if (this._checkboxDelegationListener) {
+      ammendTable.removeEventListener("change", this._checkboxDelegationListener);
+    }
+    
+    // Create new delegation listener
+    this._checkboxDelegationListener = (e) => {
+      if (e.target.id === "select_all_2307") {
+        // Select all checkbox
+        this.handleSelectAllChange(e);
+      } else if (e.target.classList.contains("bir-checkbox-2307")) {
+        // Individual checkbox
+        this.handleIndividualCheckboxChange(e);
+      }
+    };
+    
+    ammendTable.addEventListener("change", this._checkboxDelegationListener);
+  }
+
+  restoreCheckboxStates() {
+    const itemCheckboxes = this.rootRef.el.querySelectorAll(".bir-checkbox-2307");
+    const selectAllCheckbox = this.rootRef.el.querySelector("#select_all_2307");
+    
+    // Restore checkbox states from checkedIds
+    itemCheckboxes.forEach(checkbox => {
+      const moveId = parseInt(checkbox.dataset.moveId);
+      checkbox.checked = this.state.checkedIds.has(moveId);
+    });
+    
+    // Update select all checkbox state based on current selections
+    if (selectAllCheckbox && itemCheckboxes.length > 0) {
+      const allChecked = Array.from(itemCheckboxes).every(cb => cb.checked);
+      const someChecked = Array.from(itemCheckboxes).some(cb => cb.checked);
+      selectAllCheckbox.checked = allChecked;
+      selectAllCheckbox.indeterminate = someChecked && !allChecked;
+    }
+  }
+
+  /**
+   * Handles "select all" checkbox change
+   * When checked: selects all visible records
+   * When unchecked: clears all selections and reverts to showing all records
+   */
+  handleSelectAllChange(e) {
+    const itemCheckboxes = this.rootRef.el.querySelectorAll(".bir-checkbox-2307");
+    itemCheckboxes.forEach(checkbox => {
+      checkbox.checked = e.target.checked;
+      const moveId = parseInt(checkbox.dataset.moveId);
+      if (e.target.checked) {
+        this.state.checkedIds.add(moveId);
+      } else {
+        this.state.checkedIds.delete(moveId);
+      }
+    });
+    // Update preview with current selections
+    this.updatePreviewOnly();
+  }
+
+  handleIndividualCheckboxChange(e) {
+    // Extract move ID from checkbox's data attribute
+    const moveId = parseInt(e.target.dataset.moveId);
+    
+    // Add or remove from selected IDs set
+    if (e.target.checked) {
+      this.state.checkedIds.add(moveId);
+    } else {
+      this.state.checkedIds.delete(moveId);
+    }
+    
+    // Update "select all" checkbox state based on current selections
+    const itemCheckboxes = this.rootRef.el.querySelectorAll(".bir-checkbox-2307");
+    const selectAllCheckbox = this.rootRef.el.querySelector("#select_all_2307");
+    const allChecked = Array.from(itemCheckboxes).every(cb => cb.checked);
+    const someChecked = Array.from(itemCheckboxes).some(cb => cb.checked);
+    if (selectAllCheckbox) {
+      selectAllCheckbox.checked = allChecked;
+      selectAllCheckbox.indeterminate = someChecked && !allChecked;
+    }
+    
+    // Update preview with current selections
+    this.updatePreviewOnly();
+  }
+
+  /**
+   * Builds URL with current parameters and updates preview iframe with loading animation
+   * Triggers when checkboxes are changed or search/month filters are modified
+   */
+  updatePreviewOnly() {
+    // Get current month from input or use state default
+    const monthInput = this.rootRef.el.querySelector("#month_2307");
+    let current = this.state.currentMonth;
+    
+    if (monthInput && monthInput.value) {
+      current = monthInput.value.substring(0, 7);
+    }
+    
+    const BP = this.state.selectedPartner;
+    const search = this.state.searchTerm || "";
+    const checkedIds = Array.from(this.state.checkedIds);
+
+    // Show loading animation before updating preview
+    this.showPreviewLoading();
+
+    // Build URL with all parameters using URLSearchParams for safe encoding
+    const params = new URLSearchParams();
+    params.append('id', BP);
+    params.append('month', current);
+    params.append('trigger', 'view');
+    params.append('search', search);
+    params.append('checked_ids', JSON.stringify(checkedIds));
+    
+    const url = "/report/pdf/bir_module.form_2307/?" + params.toString();
+    
+    // Update preview iframe source, which will trigger hiding the loading animation once loaded
+    const previewFrame = this.rootRef.el.querySelector("#preview_2307");
+    if (previewFrame) {
+      previewFrame.src = url;
+    }
+  }
+
+  /**
+   * Shows loading spinner overlay on the preview iframe
+   * Called before updating the preview to indicate data is being fetched
+   */
+  showPreviewLoading() {
+    const previewContainer = this.rootRef.el.querySelector(".preview-container-2307");
+    if (!previewContainer) return;
+
+    // Create or show loading overlay
+    let loader = previewContainer.querySelector(".preview-loader-2307");
+    if (!loader) {
+      loader = document.createElement("div");
+      loader.className = "preview-loader-2307";
+      loader.innerHTML = `
+        <div class="loader-spinner">
+          <div class="spinner"></div>
+          <p>Generating preview...</p>
+        </div>
+      `;
+      previewContainer.appendChild(loader);
+    }
+    loader.style.display = "flex";
+  }
+
+  /**
+   * Hides the loading spinner overlay when preview finishes loading
+   * Called when iframe load event is triggered
+   */
+  hidePreviewLoading() {
+    const previewContainer = this.rootRef.el.querySelector(".preview-container-2307");
+    if (!previewContainer) return;
+
+    const loader = previewContainer.querySelector(".preview-loader-2307");
+    if (loader) {
+      loader.style.display = "none";
+    }
+  }
+
+  /**
+   * Attaches load event listener to preview iframe to hide loading animation when complete
+   */
+  attachPreviewLoadListener() {
+    const previewFrame = this.rootRef.el.querySelector("#preview_2307");
+    if (previewFrame) {
+      previewFrame.addEventListener("load", () => {
+        this.hidePreviewLoading();
+      });
     }
   }
 }

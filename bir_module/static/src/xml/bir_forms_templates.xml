@@ -58,7 +58,7 @@
                 <div class="bir-data-table">
                     <div id="ammend_table_2307"/>
                 </div>
-                <div class="bir-preview-panel">
+                <div class="bir-preview-panel preview-container-2307" style="position: relative;">
                     <iframe id="preview_2307" class="bir-preview-iframe"></iframe>
                 </div>
             </div>

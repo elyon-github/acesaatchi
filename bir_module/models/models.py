@@ -72,6 +72,30 @@ class bir_reports(models.Model):
     def test(self):
         pass
 
+    @api.model
+    def _parse_checked_ids(self, checked_ids_param):
+        """Parse checked IDs from JSON string and ensure list of ints
+        
+        Args:
+            checked_ids_param: JSON string or list of selected invoice IDs from frontend
+            
+        Returns:
+            List of integer move IDs, or empty list if parsing fails
+        """
+        import json
+        try:
+            if isinstance(checked_ids_param, str):
+                if checked_ids_param == '[]' or not checked_ids_param:
+                    return []
+                loaded = json.loads(checked_ids_param)
+            elif isinstance(checked_ids_param, list):
+                loaded = checked_ids_param
+            else:
+                return []
+            # Ensure all are ints and valid
+            return [int(i) for i in loaded if str(i).isdigit()]
+        except Exception:
+            return []
 
 ##############################################################################################################################################################################
 ################################################################ 2307 ########################################################################################################
@@ -79,16 +103,19 @@ class bir_reports(models.Model):
 
 
     def x_2307_forms(self, args):
+        import json
         from urllib.parse import urlencode
         search = args.get('search', '')
+        checked_ids = args.get('checked_ids', [])
         
-        # Build URL with search parameter
+        # Build URL with search and checked_ids parameters
         url_params = {
             'id': args['id'],
             'month': args['month'],
             'trigger': args['trigger'],
             'tranid': args['tranid'],
-            'search': search
+            'search': search,
+            'checked_ids': json.dumps(checked_ids) if checked_ids else '[]'
         }
         
         url = f"/report/pdf/bir_module.form_2307/?{urlencode(url_params)}"
@@ -102,6 +129,7 @@ class bir_reports(models.Model):
     def x_get_2307_data(self, args):
         data = []
         search = args[5] if len(args) > 5 else ""
+        checked_ids = args[6] if len(args) > 6 else []
 
         if args[2] == 'reprint':
             transactional = self._2307_query_reprint(args)
@@ -110,7 +138,7 @@ class bir_reports(models.Model):
         #     transactional = self._2307_query_ammend(args)
         #     data.append(transactional)
         else:
-            transactional = self._2307_query_normal(args, search)
+            transactional = self._2307_query_normal(args, search, checked_ids)
             data.append(transactional)
 
         if args[2] == 'table':
@@ -121,7 +149,6 @@ class bir_reports(models.Model):
         if args[2] == 'ammend':
             self.record_bir_form_print(data[0], '2307', args[3], args[0][1])
 
-        # raise UserError(data)
         return data
 
     def _2307_query_reprint(self, args):
@@ -171,7 +198,23 @@ class bir_reports(models.Model):
 
     #     return val
 
-    def _2307_query_normal(self, args, search=""):
+    def _2307_query_normal(self, args, search="", checked_ids=[]):
+        """Build and execute query for BIR 2307 form data
+        
+        Filters by:
+        - Posted vendor bills/invoices
+        - Selected partner
+        - Search term (bill name/number)
+        - Checkbox-selected records (if any provided)
+        
+        Args:
+            args: [partner_id, month] from form
+            search: Search term to filter bills by name
+            checked_ids: List of selected move IDs from checkboxes (empty = all records)
+            
+        Returns:
+            List of tuples containing invoice data for processing
+        """
         query = """ SELECT Abs(T1.price_subtotal)*(Abs(T3.amount)/100), T1.price_subtotal, T5.name, T5.vat, T4.name, T3.name,
             T0.id, T0.move_type, T0.name, T0.amount_total, T0.amount_untaxed, T0.invoice_date, T0.invoice_date_due, T0.payment_state {2} 
             FROM account_move T0 
@@ -183,7 +226,7 @@ class bir_reports(models.Model):
             {3} 
             WHERE T0.state='posted' AND T0.company_id = {0} AND T0.move_type = 'in_invoice' {1}"""
 
-        end_parameter = self._2307_params(trans=args[1], id=args[0], search=search)
+        end_parameter = self._2307_params(trans=args[1], id=args[0], search=search, checked_ids=checked_ids)
 
         self._cr.execute(query.format(self.env.company.id,
                          end_parameter[0], end_parameter[1], end_parameter[2]))
@@ -192,10 +235,22 @@ class bir_reports(models.Model):
         return val
 
     def _2307_params(self, **kwargs):
+        """Build WHERE clause parameters for BIR 2307 query
+        
+        Handles:
+        - Partner filtering
+        - Date range filtering by quarter
+        - Search term filtering
+        - Checkbox-selected records filtering
+        
+        Returns:
+            [param_string, field_string, join_string] for query construction
+        """
         param = ""
         field = ""
         join = ""
         search = kwargs.get('search', '')
+        checked_ids = kwargs.get('checked_ids', [])
 
         if kwargs['trans'] == "transactional":
             param = " AND T0.id = " + str(kwargs['id'][0])
@@ -213,6 +268,16 @@ class bir_reports(models.Model):
         # Add search filter for bill name if provided
         if search:
             param += " AND T0.name ILIKE '%" + search + "%'"
+
+        # Add filter for checked IDs if any are selected
+        # When user selects checkboxes, only those records are included in the report
+        # When no checkboxes are selected, all records are included (default behavior)
+        if checked_ids and len(checked_ids) > 0:
+            # Ensure all are ints and valid
+            valid_ids = [str(int(id)) for id in checked_ids if str(id).isdigit()]
+            if valid_ids:
+                checked_ids_str = ",".join(valid_ids)
+                param += f" AND T0.id IN ({checked_ids_str})"
 
         return [param, field, join]
 

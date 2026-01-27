@@ -441,11 +441,16 @@ export function construct_print_details(data) {
 }
 
 export function construct_ammendment_no_action(data) {
+  // Renders HTML table with checkboxes for selecting records
+  // Used in BIR 2307 form for selecting which invoices to include in the form
+  // Each row has a checkbox with data-move-id attribute containing the invoice ID
+  
   let html =
     "<table class='table table-striped table-hover dt-responsive nowrap bir-data-table' id='bir_ammend_table' role='table'><thead><tr>";
 
   html +=
-    "<th scope='col'>Name</th>\
+    "<th scope='col' style='width: 50px;'><input type='checkbox' id='select_all_2307' class='form-check-input' title='Select all'/></th>\
+        <th scope='col'>Name</th>\
         <th scope='col'>Type</th>\
         <th scope='col'>Bill Date</th>\
         <th scope='col'>Due Date</th>\
@@ -465,6 +470,7 @@ export function construct_ammendment_no_action(data) {
     let billDate = data[y][5] || "-";
     let dueDate = data[y][6] || "-";
     let paymentStatus = data[y][7] || "Unpaid";
+    let moveId = data[y][0] || ""; // Move ID is at index 0 from process_2307_ammend()
     
     // Format dates if they exist
     if (billDate !== "-" && billDate) {
@@ -474,7 +480,7 @@ export function construct_ammendment_no_action(data) {
       dueDate = new Date(dueDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
     }
     
-    // Payment status badge
+    // Payment status badge styling
     let statusBadge = 'bir-badge-warning';
     if (paymentStatus.toLowerCase() === 'paid') {
       statusBadge = 'bir-badge-success';
@@ -484,6 +490,7 @@ export function construct_ammendment_no_action(data) {
     
     html +=
       "<tr>\
+            <td><input type='checkbox' class='form-check-input bir-checkbox-2307' data-move-id='" + moveId + "'/></td>\
             <td>" +
       data[y][1] +
       "</td>\
