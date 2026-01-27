@@ -144,31 +144,31 @@
 							<t t-foreach="processed" t-as="val">
 								<div style="display: table; margin-bottom: 2.5mm;">
 									<!-- Nature of Income Payment -->
-									<div style="display: table-cell; width: 67mm; text-align: left; padding-left: 1.5mm; vertical-align: middle;">
-										<t t-esc='val["desc"]["en_US"]'/>
+									<div style="display: table-cell; width: 68mm; text-align: left; padding-left: 0.5mm; vertical-align: top; line-height: 1.7">
+										<t t-esc='val["desc"]'/>
 									</div>
 									<!-- ATC -->
-									<div style="display: table-cell; width: 20mm; text-align: center; vertical-align: middle;">
+									<div style="display: table-cell; width: 20mm; text-align: center; vertical-align: top;">
 										<t t-esc='val["code"]'/>
 									</div>
 									<!-- 1st Month -->
-									<div style="display: table-cell; width: 32mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+									<div style="display: table-cell; width: 32mm; text-align: right; padding-right: 2mm; vertical-align: top;">
 										<t t-esc='"{:,.2f}".format(val["m1"])'/>
 									</div>
 									<!-- 2nd Month -->
-									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 2mm; vertical-align: top;">
 										<t t-esc='"{:,.2f}".format(val["m2"])'/>
 									</div>
 									<!-- 3rd Month -->
-									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 2mm; vertical-align: top;">
 										<t t-esc='"{:,.2f}".format(val["m3"])'/>
 									</div>
 									<!-- Total -->
-									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+									<div style="display: table-cell; width: 33mm; text-align: right; padding-right: 2mm; vertical-align: top;">
 										<t t-esc='"{:,.2f}".format(val["m_total"])'/>
 									</div>
 									<!-- Tax Withheld -->
-									<div style="display: table-cell; width: 36mm; text-align: right; padding-right: 1.5mm; vertical-align: middle;">
+									<div style="display: table-cell; width: 36mm; text-align: right; padding-right: 2mm; vertical-align: top;">
 										<t t-esc='"{:,.2f}".format(val["taxed"])'/>
 									</div>
 								</div>

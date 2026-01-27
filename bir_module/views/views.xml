@@ -25,6 +25,32 @@
       </field>
     </record>
 
+    <record model="ir.ui.view" id="bir_module.atc_setup_form_view">
+      <field name="name">ATC setup form</field>
+      <field name="model">bir_module.atc_setup</field>
+      <field name="arch" type="xml">
+        <form>
+          <sheet>
+            <group>
+              <group string="Basic Information">
+                <field name="name"/>
+                <field name="tax_id"/>
+                <field name="scope"/>
+              </group>
+              <group string="ATC Codes">
+                <field name="atc_code_company" placeholder="e.g., WC"/>
+                <field name="atc_code_individual" placeholder="e.g., WI"/>
+              </group>
+            </group>
+            <group string="Additional Details">
+              <field name="description"/>
+              <field name="remarks"/>
+            </group>
+          </sheet>
+        </form>
+      </field>
+    </record>
+
     <!-- actions opening views on models -->
     <record id="bir_module.atc_setup_action" model="ir.actions.act_window">
       <field name="name">ATC Setup</field>

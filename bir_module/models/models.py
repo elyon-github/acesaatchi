@@ -43,6 +43,8 @@ class atc_setup(models.Model):
     scope = fields.Selection(
         [('sales', 'Sales'), ('purchase', 'Purchases')], required=True)
     remarks = fields.Char()
+    atc_code_company = fields.Char(string='ATC Code - Company (WC)', help='ATC code for corporate/company vendors')
+    atc_code_individual = fields.Char(string='ATC Code - Individual (WI)', help='ATC code for individual vendors')
 
 
 class bir_add_partner_field(models.Model):
@@ -215,7 +217,8 @@ class bir_reports(models.Model):
         Returns:
             List of tuples containing invoice data for processing
         """
-        query = """ SELECT Abs(T1.price_subtotal)*(Abs(T3.amount)/100), T1.price_subtotal, T5.name, T5.vat, T4.name, T3.name,
+        query = """ SELECT Abs(T1.price_subtotal)*(Abs(T3.amount)/100), T1.price_subtotal, T5.name, T5.vat, 
+            CASE WHEN T5.is_company THEN T4.atc_code_company ELSE T4.atc_code_individual END, T4.description,
             T0.id, T0.move_type, T0.name, T0.amount_total, T0.amount_untaxed, T0.invoice_date, T0.invoice_date_due, T0.payment_state {2} 
             FROM account_move T0 
             JOIN account_move_line T1 ON T0.id = T1.move_id  

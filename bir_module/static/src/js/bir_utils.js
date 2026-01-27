@@ -449,7 +449,7 @@ export function construct_ammendment_no_action(data) {
     "<table class='table table-striped table-hover dt-responsive nowrap bir-data-table' id='bir_ammend_table' role='table'><thead><tr>";
 
   html +=
-    "<th scope='col' style='width: 50px;'><input type='checkbox' id='select_all_2307' class='form-check-input' title='Select all'/></th>\
+    "<th scope='col' style='width: 40px;'><input type='checkbox' id='select_all_2307' class='form-check-input' title='Select all'/></th>\
         <th scope='col'>Name</th>\
         <th scope='col'>Type</th>\
         <th scope='col'>Bill Date</th>\
@@ -490,7 +490,7 @@ export function construct_ammendment_no_action(data) {
     
     html +=
       "<tr>\
-            <td><input type='checkbox' class='form-check-input bir-checkbox-2307' data-move-id='" + moveId + "'/></td>\
+            <td style='width: 40px;'><input type='checkbox' class='form-check-input bir-checkbox-2307' data-move-id='" + moveId + "'/></td>\
             <td>" +
       data[y][1] +
       "</td>\

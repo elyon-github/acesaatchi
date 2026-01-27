@@ -205,6 +205,8 @@ export class Form2307 extends Component {
           searching: false
         });
         window.jQuery(".dataTables_length").addClass("bs-select");
+        // Move checkbox counter to the DataTables top controls
+        this.moveCheckboxCounterToDataTables();
       }
       
       // Add event listeners for checkboxes (using event delegation)
@@ -215,6 +217,44 @@ export class Form2307 extends Component {
     
     // Update preview with current selections after table is loaded
     this.updatePreviewOnly();
+  }
+
+  /**
+   * Moves the checkbox counter to the DataTables top controls area
+   * Places it on the same row as the "Show 10, 25, 50, 100" dropdown
+   */
+  moveCheckboxCounterToDataTables() {
+    // Attempt multiple times to ensure DataTables is fully initialized
+    let attempts = 0;
+    const maxAttempts = 20;
+    
+    const injectCounter = () => {
+      attempts++;
+      const lengthControl = this.rootRef.el.querySelector(".dataTables_length");
+      
+      if (lengthControl && lengthControl.parentElement) {
+        // Remove existing counter if it exists
+        let counter = this.rootRef.el.querySelector("#checkbox_counter_2307");
+        if (counter) {
+          counter.remove();
+        }
+        
+        // Create new counter element
+        counter = document.createElement("span");
+        counter.id = "checkbox_counter_2307";
+        counter.className = "bir-checkbox-counter empty";
+        counter.textContent = `Selections: 0`;
+        counter.style.display = "inline-flex";
+        
+        // Insert right after the dataTables_length element
+        lengthControl.parentElement.insertBefore(counter, lengthControl.nextSibling);
+      } else if (attempts < maxAttempts) {
+        // Retry if DataTables not ready yet
+        setTimeout(injectCounter, 50);
+      }
+    };
+    
+    injectCounter();
   }
 
   /**
@@ -261,6 +301,9 @@ export class Form2307 extends Component {
       selectAllCheckbox.checked = allChecked;
       selectAllCheckbox.indeterminate = someChecked && !allChecked;
     }
+    
+    // Update checkbox counter display
+    this.updateCheckboxCounter();
   }
 
   /**
@@ -279,6 +322,8 @@ export class Form2307 extends Component {
         this.state.checkedIds.delete(moveId);
       }
     });
+    // Update checkbox counter
+    this.updateCheckboxCounter();
     // Update preview with current selections
     this.updatePreviewOnly();
   }
@@ -304,8 +349,28 @@ export class Form2307 extends Component {
       selectAllCheckbox.indeterminate = someChecked && !allChecked;
     }
     
+    // Update checkbox counter display
+    this.updateCheckboxCounter();
+    
     // Update preview with current selections
     this.updatePreviewOnly();
+  }
+
+  /**
+   * Updates the checkbox counter display
+   */
+  updateCheckboxCounter() {
+    const counter = this.rootRef.el.querySelector("#checkbox_counter_2307");
+    if (!counter) return;
+    
+    const count = this.state.checkedIds.size;
+    counter.textContent = `Selections: ${count}`;
+    
+    if (count === 0) {
+      counter.classList.add("empty");
+    } else {
+      counter.classList.remove("empty");
+    }
   }
 
   /**
