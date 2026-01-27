@@ -169,6 +169,12 @@ export class Form2307 extends Component {
   }
 
   onMonthChange(ev) {
+    // Update state with new month
+    const monthInput = this.rootRef.el.querySelector("#month_2307");
+    if (monthInput && monthInput.value) {
+      this.state.currentMonth = monthInput.value.substring(0, 7);
+    }
+    
     this.state.searchTerm = ""; // Clear search when month changes
     this.state.checkedIds = new Set(); // Clear checked IDs when month changes
     const searchInput = this.rootRef.el.querySelector("#search_2307");
