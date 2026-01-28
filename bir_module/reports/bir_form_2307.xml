@@ -138,7 +138,7 @@
 						<t t-set="processed" t-value="env['account.move'].process_2307_quarterly(values[0])"/>
 						<div t-attf-style="position: absolute; top: #{155 + offset_top}mm; left: #{7 + offset_left}mm; width: 262mm; font-size: 10pt; line-height: 1.4;">
 							<t t-foreach="processed" t-as="val">
-								<div style="display: table; padding-top: 1.3mm">
+								<div style="display: table; margin-bottom: 2mm; padding-top: 0.5mm">
 									<!-- Nature of Income Payment -->
 									<div style="display: table-cell; width: 70mm; text-align: left;  vertical-align: top; line-height: 1.75; font-size: 9.5pt;">
 										<t t-esc='val["desc"]'/>

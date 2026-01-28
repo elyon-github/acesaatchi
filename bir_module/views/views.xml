@@ -165,22 +165,22 @@
     
     <!-- menu categories -->
     <menuitem name="Forms" id="bir_module.menu_1" parent="bir_module.menu_root" sequence='1' groups="__custom__.utility_group,account.group_account_manager"/>
-    <menuitem name="Reports" id="bir_module.reports" parent="bir_module.menu_root" sequence='2' groups="__custom__.utility_group"/>
-    <menuitem name="Print History" id="bir_module.history" parent="bir_module.menu_root" action="bir_module.action_print_history" sequence='3' groups="__custom__.utility_group"/>
-    <menuitem name="Configuration" id="bir_module.config" parent="bir_module.menu_root" sequence='4' groups="__custom__.utility_group"/>
+    <!-- <menuitem name="Reports" id="bir_module.reports" parent="bir_module.menu_root" sequence='2' groups="__custom__.utility_group"/> -->
+    <!-- <menuitem name="Print History" id="bir_module.history" parent="bir_module.menu_root" action="bir_module.action_print_history" sequence='3' groups="__custom__.utility_group"/> -->
+    <menuitem name="Configuration" id="bir_module.config" parent="bir_module.menu_root" sequence='4' groups="__custom__.utility_group,account.group_account_manager"/>
 
     <menuitem name="2307" id="bir_module.2307" parent="bir_module.menu_1" action="bir_module.action_2307_page" sequence='1' groups="account.group_account_manager"/>
-    <menuitem name="2550M" id="bir_module.2550M" parent="bir_module.menu_1" action="bir_module.action_2550M_page" sequence='2' groups="__custom__.utility_group"/>
-    <menuitem name="2550Q" id="bir_module.2550Q" parent="bir_module.menu_1" action="bir_module.action_2550Q_page" sequence='3' groups="__custom__.utility_group"/>
-    <menuitem name="1601E" id="bir_module.1601e" parent="bir_module.menu_1" action="bir_module.action_1601e_page" sequence='4' groups="__custom__.utility_group"/>
+    <!-- <menuitem name="2550M" id="bir_module.2550M" parent="bir_module.menu_1" action="bir_module.action_2550M_page" sequence='2' groups="__custom__.utility_group"/> -->
+    <!-- <menuitem name="2550Q" id="bir_module.2550Q" parent="bir_module.menu_1" action="bir_module.action_2550Q_page" sequence='3' groups="__custom__.utility_group"/> -->
+    <!-- <menuitem name="1601E" id="bir_module.1601e" parent="bir_module.menu_1" action="bir_module.action_1601e_page" sequence='4' groups="__custom__.utility_group"/> -->
 
-    <menuitem name="SAWT" id="bir_module.report1" parent="bir_module.reports" action="bir_module.action_sawt_report" groups="__custom__.utility_group"/>
-    <menuitem name="MAP" id="bir_module.report2" parent="bir_module.reports" action="bir_module.action_map_report" groups="__custom__.utility_group"/>
-    <menuitem name="SLS" id="bir_module.sls" parent="bir_module.reports" action="bir_module.action_sls_report" groups="__custom__.utility_group"/>
-    <menuitem name="SLP" id="bir_module.slp" parent="bir_module.reports" action="bir_module.action_slp_report" groups="__custom__.utility_group"/>
+    <!-- <menuitem name="SAWT" id="bir_module.report1" parent="bir_module.reports" action="bir_module.action_sawt_report" groups="__custom__.utility_group"/> -->
+    <!-- <menuitem name="MAP" id="bir_module.report2" parent="bir_module.reports" action="bir_module.action_map_report" groups="__custom__.utility_group"/> -->
+    <!-- <menuitem name="SLS" id="bir_module.sls" parent="bir_module.reports" action="bir_module.action_sls_report" groups="__custom__.utility_group"/> -->
+    <!-- <menuitem name="SLP" id="bir_module.slp" parent="bir_module.reports" action="bir_module.action_slp_report" groups="__custom__.utility_group"/> -->
 
-    <menuitem name="ATC Setup" id="bir_module.atc_setup" parent="bir_module.config" action="bir_module.atc_setup_action" groups="__custom__.utility_group"/>
-    <menuitem name="Signee Setup" id="bir_module.signee_setup" parent="bir_module.config" action="bir_module.signee_setup_action" groups="__custom__.utility_group"/>
+    <menuitem name="ATC Setup" id="bir_module.atc_setup" parent="bir_module.config" action="bir_module.atc_setup_action" groups="__custom__.utility_group,account.group_account_manager"/>
+    <menuitem name="Signee Setup" id="bir_module.signee_setup" parent="bir_module.config" action="bir_module.signee_setup_action" groups="__custom__.utility_group,account.group_account_manager"/>
     <!-- <menuitem name="Landed cost Vendors Setup" id="bir_module.landed_cost_vendor" parent="bir_module.config" action="bir_module.landed_cost_vendor_action"/> -->
 
     <!-- <template id="assets_backend" inherit_id="web.assets_backend"> ### V14 Deprecated
