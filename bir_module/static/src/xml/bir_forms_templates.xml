@@ -44,6 +44,14 @@
                     </div>
                     
                     <div class="bir-control-group">
+                        <label for="signee_2307_select" class="bir-control-label">Signee / Tax Agent</label>
+                        <select id="signee_2307_select" 
+                                class="bir-form-control"
+                                t-on-change="onSigneeChange">
+                        </select>
+                    </div>
+                    
+                    <div class="bir-control-group">
                         <button type="button" 
                                 id="print_2307" 
                                 class="btn btn-primary bir-btn-print"

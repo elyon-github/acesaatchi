@@ -109,6 +109,7 @@ class bir_reports(models.Model):
         from urllib.parse import urlencode
         search = args.get('search', '')
         checked_ids = args.get('checked_ids', [])
+        signee_id = args.get('signee_id', 0)
         
         # Build URL with search and checked_ids parameters
         url_params = {
@@ -117,7 +118,8 @@ class bir_reports(models.Model):
             'trigger': args['trigger'],
             'tranid': args['tranid'],
             'search': search,
-            'checked_ids': json.dumps(checked_ids) if checked_ids else '[]'
+            'checked_ids': json.dumps(checked_ids) if checked_ids else '[]',
+            'signee_id': signee_id
         }
         
         url = f"/report/pdf/bir_module.form_2307/?{urlencode(url_params)}"
@@ -1004,12 +1006,19 @@ class bir_reports(models.Model):
         return quarter
 
     def fetch_BP(self):
-        query = """ SELECT id, name FROM res_partner WHERE is_company = 'true' AND vat IS NOT NULL AND supplier_rank > 0"""
+        query = """ SELECT id, name FROM res_partner WHERE is_company = 'true' AND vat IS NOT NULL AND supplier_rank > 0 AND active = true"""
 
         self._cr.execute(query)
         val = self._cr.fetchall()
+        
+        # Fetch tags for each partner
+        result = []
+        for partner_id, partner_name in val:
+            partner = self.env['res.partner'].browse(partner_id)
+            tags = [tag.name for tag in partner.category_id]
+            result.append([partner_id, partner_name, tags])
 
-        return val
+        return result
 
     def get_bir_quarter(self, value):
         quarter = 0
@@ -1167,3 +1176,41 @@ class bir_reports(models.Model):
 
     def x_fetch_company_id(self):
         return self.env.company.id
+
+class bir_signee_setup(models.Model):
+    _name = 'bir_module.signee_setup'
+    _description = 'BIR Signee / Authorized Representative Setup'
+    _order = 'sequence asc'
+
+    name = fields.Char(string='Name', required=True)
+    tax_id = fields.Char(string='Tax ID / TIN')
+    position = fields.Char(string='Position', required=True)
+    sequence = fields.Integer(string='Sequence', default=1, help='Sequence to determine default signee (lower number = higher priority)')
+
+    @api.model
+    def get_default_signee(self):
+        """Get the signee with the lowest sequence (highest priority)"""
+        signee = self.search([], order='sequence asc', limit=1)
+        if signee:
+            return {
+                'id': signee.id,
+                'name': signee.name,
+                'tax_id': signee.tax_id or '',
+                'position': signee.position
+            }
+        return {'id': 0, 'name': '', 'tax_id': '', 'position': ''}
+
+    @api.model
+    def get_signee_by_id(self, signee_id):
+        """Get signee details by ID"""
+        if not signee_id:
+            return self.get_default_signee()
+        signee = self.browse(signee_id)
+        if signee.exists():
+            return {
+                'id': signee.id,
+                'name': signee.name,
+                'tax_id': signee.tax_id or '',
+                'position': signee.position
+            }
+        return self.get_default_signee()

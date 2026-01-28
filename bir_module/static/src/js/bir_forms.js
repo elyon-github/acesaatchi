@@ -40,6 +40,8 @@ export class Form2307 extends Component {
       filteredPartners: [],
       searchTerm: "",
       checkedIds: new Set(), // Track which records are selected via checkboxes
+      signeeList: [],
+      selectedSignee: 0,
     });
 
     onMounted(async () => {
@@ -50,8 +52,13 @@ export class Form2307 extends Component {
   }
 
   async loadInitialData() {
+    // Load partners
     const data = await this.orm.call("account.move", "fetch_BP", [""]);
     this.state.partnersList = data;
+    
+    // Load signees
+    const signees = await this.orm.call("bir_module.signee_setup", "search_read", [[], ['name', 'tax_id', 'position', 'sequence']]);
+    this.state.signeeList = signees;
     
     const partnerInput = this.rootRef.el.querySelector("#partner_2307");
     if (partnerInput && data.length > 0) {
@@ -63,6 +70,14 @@ export class Form2307 extends Component {
       partnerInput.addEventListener("input", () => this.onPartnerSearch());
       partnerInput.addEventListener("focus", () => this.showPartnerDropdown());
       document.addEventListener("click", (e) => this.handleClickOutside(e));
+      
+      // Set signee with lowest sequence as default if available
+      if (signees.length > 0) {
+        // Sort by sequence and get the first one (lowest sequence)
+        const sortedSignees = signees.sort((a, b) => a.sequence - b.sequence);
+        this.state.selectedSignee = sortedSignees[0].id;
+        this.updateSigneeDropdown();
+      }
       
       await this.loadData();
     }
@@ -96,9 +111,12 @@ export class Form2307 extends Component {
     } else {
       for (let partner of partners) {
         const isSelected = this.state.selectedPartner === partner[0];
-        html += `<div class="bir-partner-option ${isSelected ? 'selected' : ''}" data-id="${partner[0]}" data-name="${partner[1]}">
+        const tags = partner[2] || [];
+        const tagsDisplay = tags.length > 0 ? `<span class="bir-partner-tags">[${tags.join(', ')}]</span>` : '<span class="bir-partner-tags"></span>';
+        html += `<div class="bir-partner-option ${isSelected ? 'selected' : ''}" data-id="${partner[0]}" data-name="${partner[1]}" style="flex-wrap: wrap; align-items: flex-start;">
           <span class="bir-partner-option-name">${partner[1]}</span>
-          <span class="bir-partner-option-id">ID: ${partner[0]}</span>
+          ${tagsDisplay}
+          <span class="bir-partner-option-id" style="flex-basis: 100%; margin-top: 4px;">ID: ${partner[0]}</span>
         </div>`;
       }
     }
@@ -154,6 +172,27 @@ export class Form2307 extends Component {
     }
   }
 
+  updateSigneeDropdown() {
+    const signeeSelect = this.rootRef.el?.querySelector("#signee_2307_select");
+    if (!signeeSelect) return;
+
+    signeeSelect.innerHTML = "";
+    
+    for (let signee of this.state.signeeList) {
+      const option = document.createElement("option");
+      option.value = signee.id;
+      option.textContent = signee.name;
+      if (signee.id === this.state.selectedSignee) {
+        option.selected = true;
+      }
+      signeeSelect.appendChild(option);
+    }
+  }
+
+  onSigneeChange(event) {
+    this.state.selectedSignee = parseInt(event.target.value);
+  }
+
   async onPrint2307() {
     const monthInput = this.rootRef.el.querySelector("#month_2307");
     const current = monthInput ? monthInput.value : this.state.currentMonth;
@@ -163,7 +202,7 @@ export class Form2307 extends Component {
 
     const data = await this.orm.call("account.move", "x_2307_forms", [
       "",
-      { month: current, id: BP, trigger: "print", tranid: "none", search: search, checked_ids: checkedIds },
+      { month: current, id: BP, trigger: "print", tranid: "none", search: search, checked_ids: checkedIds, signee_id: this.state.selectedSignee },
     ]);
     this.action.doAction(data);
   }

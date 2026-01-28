@@ -310,6 +310,18 @@ input[type="month"]:focus {
     color: #333;
 }
 
+.bir-partner-tags {
+    color: #666;
+    font-size: 12px;
+    margin: 0 10px;
+    font-style: italic;
+    display: inline-block;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .bir-partner-option-id {
     color: #999;
     font-size: 12px;

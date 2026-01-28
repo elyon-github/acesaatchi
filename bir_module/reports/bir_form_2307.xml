@@ -78,24 +78,22 @@
 					
 					<!-- Payee TIN (4 boxes) -->
 					<div t-attf-style="position: absolute; top: #{53 + offset_top}mm; left: #{93 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
-						<t t-esc="payee_vat[0]"/>
+						<t t-esc="payee_vat[0] if len(payee_vat) > 0 else ''"/>
 					</div>
 					<div t-attf-style="position: absolute; top: #{53 + offset_top}mm; left: #{116 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
-						<t t-esc="payee_vat[1]"/>
+						<t t-esc="payee_vat[1] if len(payee_vat) > 1 else ''"/>
 					</div>
 					<div t-attf-style="position: absolute; top: #{53 + offset_top}mm; left: #{139 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
-						<t t-esc="payee_vat[2]"/>
+						<t t-esc="payee_vat[2] if len(payee_vat) > 2 else ''"/>
 					</div>
 					<div t-attf-style="position: absolute; top: #{53 + offset_top}mm; left: #{163 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
-						<t t-esc="payee_vat[3]"/>
+						<t t-esc="payee_vat[3] if len(payee_vat) > 3 else ''"/>
 					</div>
 
 					<!-- Payee Registered Name -->
 					<div t-attf-style="position: absolute; top: #{65 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; white-space: nowrap;">
-						<t t-esc="payee.name.replace('| Trade', '').strip()"/>
-					</div>
-					
-					<!-- Payee Registered Address -->
+					<t t-esc="(payee.name or '').replace('| Trade', '').strip() if payee.name else ''"/>
+				</div>
 					<div t-attf-style="position: absolute; top: #{78 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; white-space: nowrap;">
 						<t t-esc="payee.contact_address_complete"/>
 					</div>
@@ -110,24 +108,22 @@
 					
 					<!-- Payor TIN (4 boxes) -->
 					<div t-attf-style="position: absolute; top: #{105 + offset_top}mm; left: #{93 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
-						<t t-esc="payor_vat[0]"/>
+						<t t-esc="payor_vat[0] if len(payor_vat) > 0 else ''"/>
 					</div>
 					<div t-attf-style="position: absolute; top: #{105 + offset_top}mm; left: #{116 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
-						<t t-esc="payor_vat[1]"/>
+						<t t-esc="payor_vat[1] if len(payor_vat) > 1 else ''"/>
 					</div>
 					<div t-attf-style="position: absolute; top: #{105 + offset_top}mm; left: #{139 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
-						<t t-esc="payor_vat[2]"/>
+						<t t-esc="payor_vat[2] if len(payor_vat) > 2 else ''"/>
 					</div>
 					<div t-attf-style="position: absolute; top: #{105 + offset_top}mm; left: #{163 + offset_left}mm; letter-spacing: 11px; font-size: 11pt;">
-						<t t-esc="payor_vat[3]"/>
+						<t t-esc="payor_vat[3] if len(payor_vat) > 3 else ''"/>
 					</div>
 
 					<!-- Payor Registered Name -->
 					<div t-attf-style="position: absolute; top: #{117 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; white-space: nowrap;">
-						<t t-esc="payor.name.replace('| Trade', '').strip()"/>
-					</div>
-					
-					<!-- Payor Registered Address -->
+					<t t-esc="(payor.name or '').replace('| Trade', '').strip() if payor.name else ''"/>
+				</div>
 					<div t-attf-style="position: absolute; top: #{130 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 11pt; white-space: nowrap;">
 						<t t-esc="payor.contact_address_complete"/>
 					</div>
@@ -140,11 +136,11 @@
 					<!-- Part III - Details of Income Payments and Taxes Withheld -->
 					<t t-if="len(values[0]) > 0">
 						<t t-set="processed" t-value="env['account.move'].process_2307_quarterly(values[0])"/>
-						<div t-attf-style="position: absolute; top: #{155 + offset_top}mm; left: #{10 + offset_left}mm; width: 262mm; font-size: 10pt; line-height: 1.4;">
+						<div t-attf-style="position: absolute; top: #{155 + offset_top}mm; left: #{7 + offset_left}mm; width: 262mm; font-size: 10pt; line-height: 1.4;">
 							<t t-foreach="processed" t-as="val">
-								<div style="display: table; margin-bottom: 2.5mm;">
+								<div style="display: table; padding-top: 1.3mm">
 									<!-- Nature of Income Payment -->
-									<div style="display: table-cell; width: 68mm; text-align: left; padding-left: 0.5mm; vertical-align: top; line-height: 1.7">
+									<div style="display: table-cell; width: 70mm; text-align: left;  vertical-align: top; line-height: 1.75; font-size: 9.5pt;">
 										<t t-esc='val["desc"]'/>
 									</div>
 									<!-- ATC -->
@@ -179,10 +175,10 @@
 							<t t-set="total_m3" t-value="sum([val['m3'] for val in processed])"/>
 							<t t-set="total_m_total" t-value="sum([val['m_total'] for val in processed])"/>
 							<t t-set="total_taxed" t-value="sum([val['taxed'] for val in processed])"/>
-							<div t-attf-style="position: absolute; top: #{56 + offset_top}mm; left: #{5 + offset_left}mm; width: 262mm; font-size: 10pt; line-height: 1.4;">
+							<div t-attf-style="position: absolute; top: #{88 + offset_top}mm; left: #{5 + offset_left}mm; width: 262mm; font-size: 10pt; line-height: 1.4;">
 								<div style="display: table; margin-bottom: 2.5mm;  padding-top: 2px; font-weight: bold;">
 									<!-- Nature of Income Payment -->
-									<div style="display: table-cell; width: 67mm; text-align: left; padding-left: 1.5mm; vertical-align: middle;">
+									<div style="display: table-cell; width: 70mm; text-align: left; padding-left: 1.5mm; vertical-align: middle;">
 										<!-- TOTAL -->
 									</div>
 									<!-- ATC -->
@@ -212,6 +208,15 @@
 							</div>
 						</div>
 					</t>
+				</div>
+				<div style="position: absolute; top: 326mm; left: 6mm; text-align: center; width: 250mm;">
+				<!-- DYNAMIC SIGNEE TAX AGENT INFORMATION -->
+				<t t-set="signee_info" t-value="env['bir_module.signee_setup'].get_signee_by_id(int(request.params.get('signee_id', 0)))"/>
+			<div>
+				<span style="font-weight: bold; font-size: 10pt; margin-bottom: 10px; padding-left: 70px; padding-right: 70px; white-space: nowrap;"><t t-esc="signee_info.get('name', '')"/></span>
+				<span style="font-weight: bold; font-size: 10pt; margin-bottom: 10px; padding-left: 70px; padding-right: 70px; white-space: nowrap;"><t t-esc="signee_info.get('tax_id', '')"/></span>
+				<span style="font-weight: bold; font-size: 10pt; padding-left: 70px; padding-right: 70px; white-space: nowrap;"><t t-esc="signee_info.get('position', '')"/></span>
+				</div>
 				</div>
 			</div>
 		</t>

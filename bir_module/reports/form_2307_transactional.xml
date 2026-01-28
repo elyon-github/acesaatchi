@@ -45,24 +45,24 @@
 							<!-- ================================== PAYEE ===================================== -->
 							<!-- <div class="left" style="position: absolute; top:143px; left:370px; letter-spacing:12px; font-size:23px;width:600px;"><t t-esc="payee.vat"/>-000</div> -->
 							<t t-set="payee_vat" t-value="env['account.move'].x_slice_vat(payee.vat)"/>
-							<div class="left" style="position: absolute; top:143px; left:370px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payee_vat[0]"/></div>
-							<div class="left" style="position: absolute; top:143px; left:465px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payee_vat[1]"/></div>
-							<div class="left" style="position: absolute; top:143px; left:560px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payee_vat[2]"/></div>
-							<div class="left" style="position: absolute; top:143px; left:658px; letter-spacing:14px; font-size:23px;width:200px;"><t t-esc="payee_vat[3]"/></div>
+							<div class="left" style="position: absolute; top:143px; left:370px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payee_vat[0] if len(payee_vat) > 0 else ''"/></div>
+							<div class="left" style="position: absolute; top:143px; left:465px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payee_vat[1] if len(payee_vat) > 1 else ''"/></div>
+							<div class="left" style="position: absolute; top:143px; left:560px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payee_vat[2] if len(payee_vat) > 2 else ''"/></div>
+							<div class="left" style="position: absolute; top:143px; left:658px; letter-spacing:14px; font-size:23px;width:200px;"><t t-esc="payee_vat[3] if len(payee_vat) > 3 else ''"/></div>
 
-							<div class="left" style="position: absolute;top:205px;left:55px;"><t t-esc="payee.name"/></div>
+							<div class="left" style="position: absolute;top:205px;left:55px;"><t t-esc="payee.name or ''"/></div>
 							<div class="left" style="position: absolute; top:260px; left:55px;"><small><t t-esc="payee.contact_address_complete"/></small></div>
 							<div class="right" style="position: absolute; top:257px; left: 988px; letter-spacing: 5px; font-size: 21px" ><t t-esc="payee.zip"/></div>
 
 							<!-- ======================================== PAYOR ==================================== -->
 							<!-- <div class="left" style="position: absolute; top:385px; left:370px; letter-spacing:12px; font-size:23px;width:600px;"><t t-esc="payor.vat"/>-000</div> -->
 							<t t-set="payor_vat" t-value="env['account.move'].x_slice_vat(payor.vat)"/>
-							<div class="left" style="position: absolute; top:385px; left:370px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payor_vat[0]"/></div>
-							<div class="left" style="position: absolute; top:385px; left:465px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payor_vat[1]"/></div>
-							<div class="left" style="position: absolute; top:385px; left:560px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payor_vat[2]"/></div>
-							<div class="left" style="position: absolute; top:385px; left:658px; letter-spacing:14px; font-size:23px;width:200px;"><t t-esc="payor_vat[3]"/></div>
+							<div class="left" style="position: absolute; top:385px; left:370px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payor_vat[0] if len(payor_vat) > 0 else ''"/></div>
+							<div class="left" style="position: absolute; top:385px; left:465px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payor_vat[1] if len(payor_vat) > 1 else ''"/></div>
+							<div class="left" style="position: absolute; top:385px; left:560px; letter-spacing:9px; font-size:23px;width:200px;"><t t-esc="payor_vat[2] if len(payor_vat) > 2 else ''"/></div>
+							<div class="left" style="position: absolute; top:385px; left:658px; letter-spacing:14px; font-size:23px;width:200px;"><t t-esc="payor_vat[3] if len(payor_vat) > 3 else ''"/></div>
 
-							<div class="left" style="position: absolute; top:445px; left:55px;"><t t-esc="payor.name"/></div>
+							<div class="left" style="position: absolute; top:445px; left:55px;"><t t-esc="payor.name or ''"/></div>
 							<div class="left" style="position: absolute; top:500px; left:55px;"><small><t t-esc="payor.contact_address_complete"/></small></div>
 							<div class="right" style="position: absolute; top:497px; left: 988px; letter-spacing: 5px; font-size: 21px" ><t t-esc="payor.zip"/></div>
 								
