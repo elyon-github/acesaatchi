@@ -310,6 +310,18 @@ input[type="month"]:focus {
     color: #333;
 }
 
+.bir-partner-tags {
+    color: #666;
+    font-size: 12px;
+    margin: 0 10px;
+    font-style: italic;
+    display: inline-block;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .bir-partner-option-id {
     color: #999;
     font-size: 12px;
@@ -337,6 +349,8 @@ input[type="month"]:focus {
     overflow-y: auto;
     max-height: 600px;
     display: block;
+    padding-top: 15px;
+    border-top: 1px solid #e9ecef;
 }
 
 .bir-data-table thead {
@@ -606,5 +620,164 @@ input[type="month"]:focus {
         padding: 0.375rem 0.5rem;
         font-size: 12px;
     }
+}
+
+/* =========================================
+   Loading Animation for Preview
+   ========================================= */
+
+/**
+ * Loading spinner overlay shown when preview is being generated
+ * Displays over the iframe and fades out when preview loads
+ */
+.preview-loader-2307 {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    border-radius: 6px;
+}
+
+.loader-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.loader-spinner p {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    letter-spacing: 0.5px;
+}
+
+/**
+ * Animated spinner component
+ * Creates rotating circle animation effect
+ */
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f0f0f0;
+    border-top-color: #10b981;
+    border-right-color: #10b981;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+/**
+ * Rotation animation for spinner
+ * Continuously rotates the spinner element
+ */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* =========================================
+   DataTables Customizations
+   ========================================= */
+
+/* DataTables wrapper and controls */
+.dataTables_wrapper {
+    position: relative;
+}
+
+.dataTables_top {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    margin-bottom: 15px !important;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+/* DataTables length selector - make dropdown wider */
+.dataTables_length {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px;
+    margin: 0 !important;
+    flex-wrap: wrap;
+}
+
+#checkbox_counter_2307 {
+    display: inline-flex !important;
+    align-items: center !important;
+    margin-left: 15px;
+}
+
+.dataTables_length label {
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px;
+    font-size: 13px;
+    color: #495057;
+    font-weight: 500;
+}
+
+.dataTables_length select {
+    padding: 8px 32px 8px 12px !important;
+    border: 2px solid #e9ecef !important;
+    border-radius: 5px !important;
+    background-color: #ffffff !important;
+    font-size: 13px;
+    min-width: 100px !important;
+    cursor: pointer;
+    appearance: none !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23495057' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 32px !important;
+    transition: all 0.2s ease;
+}
+
+.dataTables_length select:hover {
+    border-color: #adb5bd !important;
+    background-color: #fafafa !important;
+}
+
+.dataTables_length select:focus {
+    border-color: #10b981 !important;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1) !important;
+    outline: none !important;
+}
+
+/* Checkbox counter display */
+.bir-checkbox-counter {
+    display: inline-flex !important;
+    align-items: center !important;
+    background-color: #e8f5e9;
+    color: #10b981;
+    padding: 8px 16px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid #c8e6c9;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+.bir-checkbox-counter.empty {
+    background-color: #f5f5f5;
+    color: #999;
+    border-color: #ddd;
+}
+
+.bir-checkbox-counter:not(.empty) {
+    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.15);
 }
 

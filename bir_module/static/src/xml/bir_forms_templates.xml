@@ -10,14 +10,28 @@
             <div class="bir-controls-section">
                 <div class="bir-controls-row">
                     <div class="bir-control-group">
-                        <label for="month_2307" class="bir-control-label">Taxable Month/Year</label>
+                        <label for="from_date_2307" class="bir-control-label">From Date</label>
                         <input type="date" 
-                               id="month_2307" 
-                               class="month_2307 bir-form-control"
-                               t-att-value="state.currentMonth + '-01'"
-                               t-on-change="onMonthChange"
-                               placeholder="Select month"/>
+                               id="from_date_2307" 
+                               class="from_date_2307 bir-form-control"
+                               t-att-value="state.fromDate"
+                               placeholder="Select from date"/>
                     </div>
+                    
+                    <div class="bir-control-group">
+                        <label for="to_date_2307" class="bir-control-label">To Date</label>
+                        <input type="date" 
+                               id="to_date_2307" 
+                               class="to_date_2307 bir-form-control"
+                               t-att-value="state.toDate"
+                               placeholder="Select to date"/>
+                    </div>
+
+                    <t t-if="state.dateRangeError">
+                        <div class="bir-error-message" style="color: red; font-weight: bold; margin-top: 5px;">
+                            <t t-esc="state.dateRangeError"/>
+                        </div>
+                    </t>
                     
                     <div class="bir-control-group bir-partner-search-wrapper">
                         <label for="partner_2307" class="bir-control-label">Partner</label>
@@ -44,6 +58,14 @@
                     </div>
                     
                     <div class="bir-control-group">
+                        <label for="signee_2307_select" class="bir-control-label">Signee / Tax Agent</label>
+                        <select id="signee_2307_select" 
+                                class="bir-form-control"
+                                t-on-change="onSigneeChange">
+                        </select>
+                    </div>
+                    
+                    <div class="bir-control-group">
                         <button type="button" 
                                 id="print_2307" 
                                 class="btn btn-primary bir-btn-print"
@@ -58,7 +80,7 @@
                 <div class="bir-data-table">
                     <div id="ammend_table_2307"/>
                 </div>
-                <div class="bir-preview-panel">
+                <div class="bir-preview-panel preview-container-2307" style="position: relative;">
                     <iframe id="preview_2307" class="bir-preview-iframe"></iframe>
                 </div>
             </div>

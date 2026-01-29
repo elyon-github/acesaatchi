@@ -1,4 +1,12 @@
 <odoo>
+    <!-- Record rule for ATC Setup - filter by company -->
+    <record id="bir_module.atc_setup_company_rule" model="ir.rule">
+      <field name="name">ATC Setup - Company Rule</field>
+      <field name="model_id" ref="model_bir_module_atc_setup"/>
+      <field name="global" eval="True"/>
+      <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
     <!-- explicit list view definition -->
 
     <!-- <record model="ir.ui.view" id="bir_module.landed_cost_vendors_view">
@@ -20,8 +28,72 @@
         <list>
           <field name="name"/>
           <field name="tax_id"/>
+          <field name="company_id" groups="base.group_multi_company"/>
           <field name="scope"/>
+          <field name="description"/>
+          <field name="atc_code_company"/>
+          <field name="atc_code_individual"/>
+          <field name="remarks"/>
         </list>
+      </field>
+    </record>
+
+    <record model="ir.ui.view" id="bir_module.atc_setup_form_view">
+      <field name="name">ATC setup form</field>
+      <field name="model">bir_module.atc_setup</field>
+      <field name="arch" type="xml">
+        <form>
+          <sheet>
+            <group>
+              <group string="Basic Information">
+                <field name="name"/>
+                <field name="tax_id" domain="[('type_tax_use', 'in', ['purchase', 'sale'])]" context="{'active_test': False}"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="scope"/>
+              </group>
+              <group string="ATC Codes">
+                <field name="atc_code_company" placeholder="e.g., WC"/>
+                <field name="atc_code_individual" placeholder="e.g., WI"/>
+              </group>
+            </group>
+            <group string="Additional Details">
+              <field name="description"/>
+              <field name="remarks"/>
+            </group>
+          </sheet>
+        </form>
+      </field>
+    </record>
+
+    <!-- Signee Setup Views -->
+    <record model="ir.ui.view" id="bir_module.signee_setup_view">
+      <field name="name">Signee setup list</field>
+      <field name="model">bir_module.signee_setup</field>
+      <field name="arch" type="xml">
+        <list>
+          <field name="sequence" widget="handle"/>
+          <field name="name"/>
+          <field name="tax_id"/>
+          <field name="position"/>
+        </list>
+      </field>
+    </record>
+
+    <record model="ir.ui.view" id="bir_module.signee_setup_form_view">
+      <field name="name">Signee setup form</field>
+      <field name="model">bir_module.signee_setup</field>
+      <field name="arch" type="xml">
+        <form>
+          <sheet>
+            <group>
+              <field name="name" string="Full Name"/>
+              <field name="position" string="Position / Title"/>
+            </group>
+            <group>
+              <field name="tax_id" placeholder="e.g., 123-456-789-000" string="Tax ID / TIN"/>
+            </group>
+          </sheet>
+        </form>
       </field>
     </record>
 
@@ -29,6 +101,12 @@
     <record id="bir_module.atc_setup_action" model="ir.actions.act_window">
       <field name="name">ATC Setup</field>
       <field name="res_model">bir_module.atc_setup</field>
+      <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="bir_module.signee_setup_action" model="ir.actions.act_window">
+      <field name="name">Signee Setup</field>
+      <field name="res_model">bir_module.signee_setup</field>
       <field name="view_mode">list,form</field>
     </record>
 
@@ -93,25 +171,26 @@
     </record>
 
     <!-- Top menu item -->
-    <menuitem name="BIR" id="bir_module.menu_root" web_icon="bir_module,static/src/img/icon.png" groups="__custom__.utility_group,account.group_account_manager"/>
+    <menuitem name="BIR" id="bir_module.menu_root" web_icon="bir_module,static/src/img/icon.png" groups="bir_module.group_bir_user,bir_module.group_bir_admin"/>
     
     <!-- menu categories -->
-    <menuitem name="Forms" id="bir_module.menu_1" parent="bir_module.menu_root" sequence='1' groups="__custom__.utility_group,account.group_account_manager"/>
-    <menuitem name="Reports" id="bir_module.reports" parent="bir_module.menu_root" sequence='2' groups="__custom__.utility_group"/>
-    <menuitem name="Print History" id="bir_module.history" parent="bir_module.menu_root" action="bir_module.action_print_history" sequence='3' groups="__custom__.utility_group"/>
-    <menuitem name="Configuration" id="bir_module.config" parent="bir_module.menu_root" sequence='4' groups="__custom__.utility_group"/>
+    <menuitem name="Forms" id="bir_module.menu_1" parent="bir_module.menu_root" sequence='1' groups="bir_module.group_bir_user,bir_module.group_bir_admin"/>
+    <!-- <menuitem name="Reports" id="bir_module.reports" parent="bir_module.menu_root" sequence='2' groups="bir_module.group_bir_user"/> -->
+    <!-- <menuitem name="Print History" id="bir_module.history" parent="bir_module.menu_root" action="bir_module.action_print_history" sequence='3' groups="bir_module.group_bir_user"/> -->
+    <menuitem name="Configuration" id="bir_module.config" parent="bir_module.menu_root" sequence='4' groups="bir_module.group_bir_admin"/>
 
-    <menuitem name="2307" id="bir_module.2307" parent="bir_module.menu_1" action="bir_module.action_2307_page" sequence='1' groups="account.group_account_manager"/>
-    <menuitem name="2550M" id="bir_module.2550M" parent="bir_module.menu_1" action="bir_module.action_2550M_page" sequence='2' groups="__custom__.utility_group"/>
-    <menuitem name="2550Q" id="bir_module.2550Q" parent="bir_module.menu_1" action="bir_module.action_2550Q_page" sequence='3' groups="__custom__.utility_group"/>
-    <menuitem name="1601E" id="bir_module.1601e" parent="bir_module.menu_1" action="bir_module.action_1601e_page" sequence='4' groups="__custom__.utility_group"/>
+    <menuitem name="2307" id="bir_module.2307" parent="bir_module.menu_1" action="bir_module.action_2307_page" sequence='1' groups="bir_module.group_bir_user,bir_module.group_bir_admin"/>
+    <!-- <menuitem name="2550M" id="bir_module.2550M" parent="bir_module.menu_1" action="bir_module.action_2550M_page" sequence='2' groups="__custom__.utility_group"/> -->
+    <!-- <menuitem name="2550Q" id="bir_module.2550Q" parent="bir_module.menu_1" action="bir_module.action_2550Q_page" sequence='3' groups="__custom__.utility_group"/> -->
+    <!-- <menuitem name="1601E" id="bir_module.1601e" parent="bir_module.menu_1" action="bir_module.action_1601e_page" sequence='4' groups="__custom__.utility_group"/> -->
 
-    <menuitem name="SAWT" id="bir_module.report1" parent="bir_module.reports" action="bir_module.action_sawt_report" groups="__custom__.utility_group"/>
-    <menuitem name="MAP" id="bir_module.report2" parent="bir_module.reports" action="bir_module.action_map_report" groups="__custom__.utility_group"/>
-    <menuitem name="SLS" id="bir_module.sls" parent="bir_module.reports" action="bir_module.action_sls_report" groups="__custom__.utility_group"/>
-    <menuitem name="SLP" id="bir_module.slp" parent="bir_module.reports" action="bir_module.action_slp_report" groups="__custom__.utility_group"/>
+    <!-- <menuitem name="SAWT" id="bir_module.report1" parent="bir_module.reports" action="bir_module.action_sawt_report" groups="__custom__.utility_group"/> -->
+    <!-- <menuitem name="MAP" id="bir_module.report2" parent="bir_module.reports" action="bir_module.action_map_report" groups="__custom__.utility_group"/> -->
+    <!-- <menuitem name="SLS" id="bir_module.sls" parent="bir_module.reports" action="bir_module.action_sls_report" groups="__custom__.utility_group"/> -->
+    <!-- <menuitem name="SLP" id="bir_module.slp" parent="bir_module.reports" action="bir_module.action_slp_report" groups="__custom__.utility_group"/> -->
 
-    <menuitem name="ATC Setup" id="bir_module.atc_setup" parent="bir_module.config" action="bir_module.atc_setup_action" groups="__custom__.utility_group"/>
+    <menuitem name="ATC Setup" id="bir_module.atc_setup" parent="bir_module.config" action="bir_module.atc_setup_action" groups="bir_module.group_bir_admin"/>
+    <menuitem name="Signee Setup" id="bir_module.signee_setup" parent="bir_module.config" action="bir_module.signee_setup_action" groups="bir_module.group_bir_admin"/>
     <!-- <menuitem name="Landed cost Vendors Setup" id="bir_module.landed_cost_vendor" parent="bir_module.config" action="bir_module.landed_cost_vendor_action"/> -->
 
     <!-- <template id="assets_backend" inherit_id="web.assets_backend"> ### V14 Deprecated

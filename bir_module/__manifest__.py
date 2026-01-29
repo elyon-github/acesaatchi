@@ -13,6 +13,7 @@
     'depends': ['base', 'account', 'web'],
     # always loaded
     'data': [
+        'security/groups.xml',
         'security/ir.model.access.csv',
         'views/views.xml',
         # 'views/bir_inherit.xml',

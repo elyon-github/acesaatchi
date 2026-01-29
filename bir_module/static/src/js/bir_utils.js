@@ -441,14 +441,40 @@ export function construct_print_details(data) {
 }
 
 export function construct_ammendment_no_action(data) {
-  let html =
-    "<table class='table table-striped table-hover dt-responsive nowrap bir-data-table' id='bir_ammend_table' role='table'><thead><tr>";
+  // Renders HTML table with checkboxes for selecting records
+  // Used in BIR 2307 form for selecting which invoices to include in the form
+  // Each row has a checkbox with data-move-id attribute containing the invoice ID
+  
+  let totalUntaxed = 0;
+  let totalAmount = 0;
+
+  // Calculate totals first
+  for (let y in data) {
+    let untaxedAmount = parseFloat(data[y][3]) || 0;
+    let totalAmt = parseFloat(data[y][4]) || 0;
+    totalUntaxed += untaxedAmount;
+    totalAmount += totalAmt;
+  }
+
+  // Create wrapper with totals at top right
+  let html = "<div style='position: relative; margin-bottom: 20px;'>\
+            <div style='position: absolute; top: 0; right: 0; display: flex; gap: 40px; font-weight: bold; font-size: 13px;'>\
+              <div style='text-align: right;'>\
+                <div style='margin-bottom: 4px; font-size: 12px; color: #666;'>Total Untaxed Amount:</div>\
+                <div style='font-size: 15px; color: #333;'>" + numberWithCommas(totalUntaxed) + "</div>\
+              </div>\
+              <div style='text-align: right; min-width: 120px;'>\
+                <div style='margin-bottom: 4px; font-size: 12px; color: #666;'>Total Amount:</div>\
+                <div style='font-size: 15px; color: #333;'>" + numberWithCommas(totalAmount) + "</div>\
+              </div>\
+            </div>\
+            <table class='table table-striped table-hover dt-responsive nowrap bir-data-table' id='bir_ammend_table' role='table' style='margin-top: 20px;'><thead><tr>";
 
   html +=
-    "<th scope='col'>Name</th>\
+    "<th scope='col' style='width: 40px;'><input type='checkbox' id='select_all_2307' class='form-check-input' title='Select all'/></th>\
+        <th scope='col'>Name</th>\
         <th scope='col'>Type</th>\
         <th scope='col'>Bill Date</th>\
-        <th scope='col'>Due Date</th>\
         <th scope='col'>Payment Status</th>\
         <th scope='col' class='text-right'>Untaxed Amount</th>\
         <th scope='col' class='text-right'>Total Amount</th>\
@@ -463,18 +489,22 @@ export function construct_ammendment_no_action(data) {
     }
     
     let billDate = data[y][5] || "-";
-    let dueDate = data[y][6] || "-";
     let paymentStatus = data[y][7] || "Unpaid";
+    let moveId = data[y][0] || ""; // Move ID is at index 0 from process_2307_ammend()
+    let billName = data[y][1] || "";
+    let untaxedAmount = parseFloat(data[y][3]) || 0;
+    let totalAmt = parseFloat(data[y][4]) || 0;
+    
+    // Accumulate totals
+    totalUntaxed += untaxedAmount;
+    totalAmount += totalAmt;
     
     // Format dates if they exist
     if (billDate !== "-" && billDate) {
       billDate = new Date(billDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
     }
-    if (dueDate !== "-" && dueDate) {
-      dueDate = new Date(dueDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-    }
     
-    // Payment status badge
+    // Payment status badge styling
     let statusBadge = 'bir-badge-warning';
     if (paymentStatus.toLowerCase() === 'paid') {
       statusBadge = 'bir-badge-success';
@@ -484,17 +514,15 @@ export function construct_ammendment_no_action(data) {
     
     html +=
       "<tr>\
-            <td>" +
-      data[y][1] +
-      "</td>\
+            <td style='width: 40px;'><input type='checkbox' class='form-check-input bir-checkbox-2307' data-move-id='" + moveId + "'/></td>\
+            <td><a href='#' class='bir-bill-link' data-move-id='" + moveId + "'>" +
+      billName +
+      "</a></td>\
             <td><span class='bir-badge " + badgeClass + "'>" +
       scope +
       "</span></td>\
             <td>" +
       billDate +
-      "</td>\
-            <td>" +
-      dueDate +
       "</td>\
             <td><span class='bir-badge " +
       statusBadge +
@@ -502,14 +530,15 @@ export function construct_ammendment_no_action(data) {
       paymentStatus +
       "</span></td>\
             <td class='text-right'>" +
-      numberWithCommas(data[y][3]) +
+      numberWithCommas(untaxedAmount) +
       "</td>\
             <td class='text-right'>" +
-      numberWithCommas(data[y][4]) +
+      numberWithCommas(totalAmt) +
       "</td></tr>";
   }
 
-  html += "</tbody></table>";
+  html += "</tbody></table></div>";
+  
   return html;
 }
 
