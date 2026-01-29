@@ -40,7 +40,7 @@ class atc_setup(models.Model):
     name = fields.Char(required=True)
     tax_id = fields.Many2one('account.tax', required=True)
     company_id = fields.Many2one('res.company', string='Company', required=True, 
-                                  default=lambda self: self.env.company)
+                                  default=lambda self: self.env.company, readonly=True)
     description = fields.Char()
     scope = fields.Selection(
         [('sales', 'Sales'), ('purchase', 'Purchases')], required=True)
