@@ -36,6 +36,8 @@ export class Form2307 extends Component {
     // Component state for managing form and UI
     this.state = useState({
       currentMonth: get_current(),
+      fromDate: this.getDefaultFromDate(),
+      toDate: this.getDefaultToDate(),
       selectedPartner: 0,
       partnersList: [],
       filteredPartners: [],
@@ -43,13 +45,173 @@ export class Form2307 extends Component {
       checkedIds: new Set(), // Track which records are selected via checkboxes
       signeeList: [],
       selectedSignee: 0,
+      dateRangeError: "", // Store date range validation errors
     });
 
     onMounted(async () => {
       await this.loadInitialData();
       // Attach load listener to show/hide loading animation when preview updates
       this.attachPreviewLoadListener();
+      // Attach date range event listeners
+      this.attachDateRangeListeners();
     });
+  }
+
+  getDefaultFromDate() {
+    const today = new Date();
+    const year = today.getFullYear();
+    let month = today.getMonth() + 1;
+    
+    // Find the start month of the current quarter
+    if (month <= 3) month = 1;
+    else if (month <= 6) month = 4;
+    else if (month <= 9) month = 7;
+    else month = 10;
+    
+    return this.formatDateForInput(new Date(year, month - 1, 1));
+  }
+
+  getDefaultToDate() {
+    const today = new Date();
+    const year = today.getFullYear();
+    let month = today.getMonth() + 1;
+    
+    // Find the end month of the current quarter
+    if (month <= 3) month = 3;
+    else if (month <= 6) month = 6;
+    else if (month <= 9) month = 9;
+    else month = 12;
+    
+    // Get last day of month
+    const lastDay = new Date(year, month, 0).getDate();
+    return this.formatDateForInput(new Date(year, month - 1, lastDay));
+  }
+
+  formatDateForInput(dateObj) {
+    // Format date as YYYY-MM-DD for HTML date input (using local time, not UTC)
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  attachDateRangeListeners() {
+    const fromDateInput = this.rootRef.el?.querySelector("#from_date_2307");
+    const toDateInput = this.rootRef.el?.querySelector("#to_date_2307");
+    
+    if (fromDateInput) {
+      fromDateInput.addEventListener("change", (e) => this.onFromDateChange(e));
+    }
+    if (toDateInput) {
+      toDateInput.addEventListener("change", (e) => this.onToDateChange(e));
+    }
+  }
+
+  getQuarterMonthRange(monthNum) {
+    // Get the start and end month for a given quarter
+    const m = parseInt(monthNum);
+    if (m >= 1 && m <= 3) return { start: 1, end: 3 };
+    if (m >= 4 && m <= 6) return { start: 4, end: 6 };
+    if (m >= 7 && m <= 9) return { start: 7, end: 9 };
+    return { start: 10, end: 12 };
+  }
+
+  validateDateRangeQuarterly(fromDate, toDate) {
+    // Validate that the dates fall within one quarter and set appropriate max for toDate
+    if (!fromDate || !toDate) return { valid: false, error: "Both dates must be set" };
+    
+    const from = new Date(fromDate);
+    const to = new Date(toDate);
+    
+    if (from > to) {
+      return { valid: false, error: "From date cannot be after To date" };
+    }
+    
+    const fromQuarter = this.getQuarterMonthRange(from.getMonth() + 1);
+    const toQuarter = this.getQuarterMonthRange(to.getMonth() + 1);
+    
+    if (fromQuarter.start !== toQuarter.start) {
+      return { valid: false, error: `Dates must be within the same quarter (Q${(fromQuarter.start - 1) / 3 + 1})` };
+    }
+    
+    if (from.getFullYear() !== to.getFullYear()) {
+      return { valid: false, error: "Both dates must be in the same year" };
+    }
+    
+    return { valid: true, error: "" };
+  }
+
+  onFromDateChange(ev) {
+    const fromDateInput = this.rootRef.el.querySelector("#from_date_2307");
+    const toDateInput = this.rootRef.el.querySelector("#to_date_2307");
+    
+    if (!fromDateInput.value) return;
+    
+    this.state.fromDate = fromDateInput.value;
+    
+    // Auto-set toDate to last day of same quarter
+    const fromDate = new Date(fromDateInput.value);
+    const quarter = this.getQuarterMonthRange(fromDate.getMonth() + 1);
+    const year = fromDate.getFullYear();
+    
+    // Get the last day of the quarter's end month (using local date, not UTC)
+    const lastDay = new Date(year, quarter.end, 0).getDate();
+    const toDateStr = this.formatDateForInput(new Date(year, quarter.end - 1, lastDay));
+    
+    // Always set toDate to end of quarter (auto-adjust)
+    toDateInput.value = toDateStr;
+    this.state.toDate = toDateStr;
+    
+    // Set max date on toDate input to end of quarter
+    toDateInput.setAttribute("max", toDateStr);
+    
+    // Validate range
+    const validation = this.validateDateRangeQuarterly(fromDateInput.value, toDateStr);
+    this.state.dateRangeError = validation.valid ? "" : validation.error;
+    
+    if (validation.valid) {
+      this.state.searchTerm = "";
+      this.state.checkedIds = new Set();
+      const searchInput = this.rootRef.el.querySelector("#search_2307");
+      if (searchInput) searchInput.value = "";
+      this.loadData();
+    }
+  }
+
+  onToDateChange(ev) {
+    const fromDateInput = this.rootRef.el.querySelector("#from_date_2307");
+    const toDateInput = this.rootRef.el.querySelector("#to_date_2307");
+    
+    if (!toDateInput.value) return;
+    
+    this.state.toDate = toDateInput.value;
+    
+    // Get the quarter end and limit toDate if it exceeds it
+    const fromDate = new Date(fromDateInput.value);
+    const quarter = this.getQuarterMonthRange(fromDate.getMonth() + 1);
+    const year = fromDate.getFullYear();
+    
+    // Get the last day of the quarter's end month
+    const lastDay = new Date(year, quarter.end, 0).getDate();
+    const quarterEndStr = this.formatDateForInput(new Date(year, quarter.end - 1, lastDay));
+    
+    // Auto-correct if To Date exceeds quarter end
+    if (toDateInput.value > quarterEndStr) {
+      toDateInput.value = quarterEndStr;
+      this.state.toDate = quarterEndStr;
+    }
+    
+    // Validate range
+    const validation = this.validateDateRangeQuarterly(fromDateInput.value, this.state.toDate);
+    this.state.dateRangeError = validation.valid ? "" : validation.error;
+    
+    if (validation.valid) {
+      this.state.searchTerm = "";
+      this.state.checkedIds = new Set();
+      const searchInput = this.rootRef.el.querySelector("#search_2307");
+      if (searchInput) searchInput.value = "";
+      this.loadData();
+    }
   }
 
   async loadInitialData() {
@@ -195,55 +357,44 @@ export class Form2307 extends Component {
   }
 
   async onPrint2307() {
-    const monthInput = this.rootRef.el.querySelector("#month_2307");
-    const current = monthInput ? monthInput.value : this.state.currentMonth;
+    // Validate date range before printing
+    const validation = this.validateDateRangeQuarterly(this.state.fromDate, this.state.toDate);
+    if (!validation.valid) {
+      alert("Cannot print: " + validation.error);
+      return;
+    }
+    
     const BP = this.state.selectedPartner;
     const search = this.state.searchTerm || "";
     const checkedIds = Array.from(this.state.checkedIds);
     const currentCompanyId = this.companyService.currentCompany.id;  // Get current company from service
 
     console.log("DEBUG: Current Company ID:", currentCompanyId);  // Debug log
+    console.log("DEBUG: From Date:", this.state.fromDate, "To Date:", this.state.toDate);
 
     const data = await this.orm.call("account.move", "x_2307_forms", [
       "",
-      { month: current, id: BP, trigger: "print", tranid: "none", search: search, checked_ids: checkedIds, signee_id: this.state.selectedSignee, company_id: currentCompanyId },
+      { from_date: this.state.fromDate, to_date: this.state.toDate, id: BP, trigger: "print", tranid: "none", search: search, checked_ids: checkedIds, signee_id: this.state.selectedSignee, company_id: currentCompanyId },
     ]);
     this.action.doAction(data);
   }
 
-  onMonthChange(ev) {
-    // Update state with new month
-    const monthInput = this.rootRef.el.querySelector("#month_2307");
-    if (monthInput && monthInput.value) {
-      this.state.currentMonth = monthInput.value.substring(0, 7);
-    }
-    
-    this.state.searchTerm = ""; // Clear search when month changes
-    this.state.checkedIds = new Set(); // Clear checked IDs when month changes
-    const searchInput = this.rootRef.el.querySelector("#search_2307");
-    if (searchInput) {
-      searchInput.value = "";
-    }
-    this.loadData();
-  }
-
   async loadData() {
-    const monthInput = this.rootRef.el.querySelector("#month_2307");
-    let current = this.state.currentMonth;
-    
-    if (monthInput && monthInput.value) {
-      // Extract YYYY-MM from the date value (ignores the day)
-      current = monthInput.value.substring(0, 7);
-    }
-    
     const BP = this.state.selectedPartner;
     const search = this.state.searchTerm || "";
+
+    // Validate date range
+    const validation = this.validateDateRangeQuarterly(this.state.fromDate, this.state.toDate);
+    if (!validation.valid) {
+      console.warn("Invalid date range:", validation.error);
+      return;
+    }
 
     // Load table with ALL records (search filtered, but not checkbox filtered)
     // Checkboxes are for selecting which records to include in the PDF/preview
     const data = await this.orm.call("account.move", "x_get_2307_data", [
       "",
-      [[BP, current], "not_transactional", "table", "2307-Quarterly", "none", search, []],
+      [[BP, this.state.fromDate, this.state.toDate], "not_transactional", "table", "2307-Quarterly", "none", search, []],
     ]);
 
     const ammendTable = this.rootRef.el.querySelector("#ammend_table_2307");
@@ -260,6 +411,8 @@ export class Form2307 extends Component {
       
       // Add event listeners for checkboxes (using event delegation)
       this.attachCheckboxEventDelegation();
+      // Add event listeners for bill name hyperlinks
+      this.attachBillLinkDelegation();
       // Restore checkbox states from previous selections
       this.restoreCheckboxStates();
     }
@@ -331,6 +484,41 @@ export class Form2307 extends Component {
     };
     
     ammendTable.addEventListener("change", this._checkboxDelegationListener);
+  }
+
+  /**
+   * Attaches event delegation listener for bill name hyperlinks
+   * Opens the vendor bill/invoice record when clicked
+   */
+  attachBillLinkDelegation() {
+    const ammendTable = this.rootRef.el.querySelector("#ammend_table_2307");
+    
+    // Remove old delegation listener if it exists
+    if (this._billLinkDelegationListener) {
+      ammendTable.removeEventListener("click", this._billLinkDelegationListener);
+    }
+    
+    // Create new delegation listener for bill links
+    this._billLinkDelegationListener = (e) => {
+      if (e.target.classList.contains("bir-bill-link")) {
+        e.preventDefault();
+        const moveId = e.target.dataset.moveId;
+        if (moveId) {
+          this.openBillRecord(parseInt(moveId));
+        }
+      }
+    };
+    
+    ammendTable.addEventListener("click", this._billLinkDelegationListener);
+  }
+
+  /**
+   * Opens the vendor bill or invoice record in a new tab
+   * @param {number} moveId - The account.move record ID
+   */
+  async openBillRecord(moveId) {
+    // Open the form view in a new page/tab
+    window.open(`/web#id=${moveId}&model=account.move&view_type=form`, "_blank");
   }
 
   restoreCheckboxStates() {
@@ -422,23 +610,18 @@ export class Form2307 extends Component {
     }
   }
 
-  /**
-   * Builds URL with current parameters and updates preview iframe with loading animation
-   * Triggers when checkboxes are changed or search/month filters are modified
-   */
   updatePreviewOnly() {
-    // Get current month from input or use state default
-    const monthInput = this.rootRef.el.querySelector("#month_2307");
-    let current = this.state.currentMonth;
-    
-    if (monthInput && monthInput.value) {
-      current = monthInput.value.substring(0, 7);
-    }
-    
     const BP = this.state.selectedPartner;
     const search = this.state.searchTerm || "";
     const checkedIds = Array.from(this.state.checkedIds);
     const currentCompanyId = this.companyService.currentCompany.id;  // Get current company from service
+
+    // Validate date range
+    const validation = this.validateDateRangeQuarterly(this.state.fromDate, this.state.toDate);
+    if (!validation.valid) {
+      console.warn("Invalid date range for preview:", validation.error);
+      return;
+    }
 
     // Show loading animation before updating preview
     this.showPreviewLoading();
@@ -446,7 +629,8 @@ export class Form2307 extends Component {
     // Build URL with all parameters using URLSearchParams for safe encoding
     const params = new URLSearchParams();
     params.append('id', BP);
-    params.append('month', current);
+    params.append('from_date', this.state.fromDate);
+    params.append('to_date', this.state.toDate);
     params.append('trigger', 'view');
     params.append('search', search);
     params.append('checked_ids', JSON.stringify(checkedIds));

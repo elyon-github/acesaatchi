@@ -127,10 +127,14 @@ class bir_reports(models.Model):
         # Debug logging
         logger.warning(f"DEBUG x_2307_forms: args company_id={args.get('company_id', 'NOT PROVIDED')}, fallback company_id={self.env.user.company_id.id}, final company_id={company_id}")
         
+        # Support both old 'month' and new 'from_date'/'to_date' parameters
+        from_date = args.get('from_date', '')
+        to_date = args.get('to_date', '')
+        month = args.get('month', '')
+        
         # Build URL with search, checked_ids, and company_id parameters
         url_params = {
             'id': args['id'],
-            'month': args['month'],
             'trigger': args['trigger'],
             'tranid': args['tranid'],
             'search': search,
@@ -138,6 +142,13 @@ class bir_reports(models.Model):
             'signee_id': signee_id,
             'company_id': company_id
         }
+        
+        # Add date parameters (either date range or legacy month)
+        if from_date and to_date:
+            url_params['from_date'] = from_date
+            url_params['to_date'] = to_date
+        elif month:
+            url_params['month'] = month
         
         url = f"/report/pdf/bir_module.form_2307/?{urlencode(url_params)}"
         
@@ -273,7 +284,7 @@ class bir_reports(models.Model):
         
         Handles:
         - Partner filtering
-        - Date range filtering by quarter
+        - Date range filtering (new) or quarter filtering (legacy)
         - Search term filtering
         - Checkbox-selected records filtering
         
@@ -289,12 +300,22 @@ class bir_reports(models.Model):
         if kwargs['trans'] == "transactional":
             param = " AND T0.id = " + str(kwargs['id'][0])
         else:
-            parameter = kwargs['id'][1].replace("-", " ").split()
-            span = self.check_quarter_2307(int(parameter[1]))
-
-            param = " AND T0.partner_id = " + \
-                str(kwargs['id'][0]) + " AND T6.id IS NULL AND "
-            param += self.sawt_map_params(span, parameter[0])
+            # Extract parameters - could be [partner_id, from_date, to_date] or [partner_id, month, ""]
+            partner_id = kwargs['id'][0]
+            param_1 = kwargs['id'][1]  # from_date or month
+            param_2 = kwargs['id'][2] if len(kwargs['id']) > 2 else ""  # to_date or empty
+            
+            param = " AND T0.partner_id = " + str(partner_id) + " AND T6.id IS NULL AND "
+            
+            # Check if we have date range (from_date and to_date)
+            if param_1 and param_2 and '-' in param_1 and '-' in param_2:
+                # New date range filtering
+                param += f" T0.invoice_date >= '{param_1}' AND T0.invoice_date <= '{param_2}'"
+            elif param_1:
+                # Legacy month filtering
+                parameter = param_1.replace("-", " ").split()
+                span = self.check_quarter_2307(int(parameter[1]))
+                param += self.sawt_map_params(span, parameter[0])
 
             field = ", T0.invoice_date, T6.id "
             join = "LEFT JOIN bir_module_print_history_line T6 ON T6.move_id = T0.id AND T6.form_type = '2307'"
@@ -315,7 +336,12 @@ class bir_reports(models.Model):
 
         return [param, field, join]
 
-    def process_2307_quarterly(self, data):
+    def process_2307_quarterly(self, data, from_date=None, to_date=None):
+        """
+        Process 2307 quarterly data. 
+        If from_date and to_date are provided, use them to map month positions.
+        Otherwise, fall back to legacy month_num calculation.
+        """
         cont = []
         temp_out = ()
         final = []
@@ -332,17 +358,25 @@ class bir_reports(models.Model):
 
             for dat in data:
                 if atc == dat[4]:
-                    month_num = self.get_bir_month_num(dat[11])  # Changed from dat[10] to dat[11] to get invoice_date
+                    # Use date range mapping if provided, otherwise use legacy method
+                    if from_date and to_date:
+                        month_num = self.get_month_position_for_date(dat[11], from_date, to_date)
+                    else:
+                        month_num = self.get_bir_month_num(dat[11])  # Legacy: Changed from dat[10] to dat[11] to get invoice_date
 
-                    if month_num == '1':
-                        dict['m1'] += dat[1]
-                    elif month_num == '2':
-                        dict['m2'] += dat[1]
-                    elif month_num == '3':
-                        dict['m3'] += dat[1]
+                    # Only include invoices that are within the selected date range
+                    if month_num != '0':  # '0' means outside selected range
+                        if month_num == '1':
+                            dict['m1'] += dat[1]
+                        elif month_num == '2':
+                            dict['m2'] += dat[1]
+                        elif month_num == '3':
+                            dict['m3'] += dat[1]
 
-                    dict['taxed'] += dat[0]
-                    dict['m_total'] += dat[1]
+                        # Only add to totals if invoice is within selected range
+                        dict['taxed'] += dat[0]
+                        dict['m_total'] += dat[1]
+                    
                     dict['desc'] = dat[5]
                     dict['code'] = dat[4]
             final.append(dict)
@@ -1224,6 +1258,167 @@ class bir_reports(models.Model):
         logger.warning(f"DEBUG TEMPLATE: raw_company_id={raw_company_id}, context_company_ids={context_company_ids}, final_company_id={company_id}, env.company={self.env.company.id}")
         return True
     
+    # ============================= BIR 2307 DATE RANGE METHODS =============================
+    
+    def parse_date_string(self, date_str):
+        """Parse date string (YYYY-MM-DD format) to date object"""
+        if hasattr(date_str, 'year'):  # Already a date object
+            return date_str
+        from datetime import datetime
+        try:
+            return datetime.strptime(str(date_str), '%Y-%m-%d').date()
+        except:
+            return None
+    
+    def get_quarter_from_date(self, date_obj):
+        """Get quarter (1-4) from a date object"""
+        if not date_obj:
+            return None
+        month = date_obj.month
+        if month in [1, 2, 3]:
+            return 1
+        elif month in [4, 5, 6]:
+            return 2
+        elif month in [7, 8, 9]:
+            return 3
+        else:
+            return 4
+    
+    def get_quarter_month_range(self, quarter_num):
+        """Get the month range for a given quarter (1-4)"""
+        quarter_ranges = {
+            1: (1, 3),
+            2: (4, 6),
+            3: (7, 9),
+            4: (10, 12)
+        }
+        return quarter_ranges.get(quarter_num, (1, 3))
+    
+    def validate_date_range_quarterly(self, from_date, to_date):
+        """
+        Validate that the date range is within one quarter.
+        Both dates should fall within the same quarter and be normalized to month boundaries.
+        Returns: tuple (is_valid, error_message, normalized_from_date, normalized_to_date)
+        """
+        from datetime import datetime, timedelta
+        
+        from_date_obj = self.parse_date_string(from_date)
+        to_date_obj = self.parse_date_string(to_date)
+        
+        if not from_date_obj or not to_date_obj:
+            return False, "Invalid date format. Please use YYYY-MM-DD format.", None, None
+        
+        if from_date_obj > to_date_obj:
+            return False, "From date cannot be after To date.", None, None
+        
+        # Get quarters for both dates
+        from_quarter = self.get_quarter_from_date(from_date_obj)
+        to_quarter = self.get_quarter_from_date(to_date_obj)
+        
+        # Check if quarters match
+        if from_quarter != to_quarter:
+            return False, f"Both dates must fall within the same quarter. From date is Q{from_quarter}, To date is Q{to_quarter}.", None, None
+        
+        # Get the year from both dates
+        if from_date_obj.year != to_date_obj.year:
+            return False, "Both dates must be in the same calendar year.", None, None
+        
+        # Normalize dates: from_date to 1st, to_date to last day of month
+        normalized_from = from_date_obj.replace(day=1)
+        
+        # Get last day of to_date month
+        next_month = to_date_obj.replace(day=28) + timedelta(days=4)
+        last_day = (next_month - timedelta(days=next_month.day)).day
+        normalized_to = to_date_obj.replace(day=last_day)
+        
+        return True, "", normalized_from, normalized_to
+    
+    def get_selected_months_in_quarter(self, from_date, to_date):
+        """
+        Get which months within the quarter are selected (1st, 2nd, 3rd).
+        Returns list of month positions selected and mapping info.
+        Example: Feb 1 - Feb 28 in Q1 returns [2] (only 2nd month)
+                 Jan 1 - Mar 31 in Q1 returns [1, 2, 3] (all months)
+        """
+        from datetime import datetime
+        
+        from_date_obj = self.parse_date_string(from_date)
+        to_date_obj = self.parse_date_string(to_date)
+        
+        if not from_date_obj or not to_date_obj:
+            return []
+        
+        quarter = self.get_quarter_from_date(from_date_obj)
+        quarter_start_month, quarter_end_month = self.get_quarter_month_range(quarter)
+        
+        # Get months in the selected range
+        selected_months = []
+        current_month = from_date_obj.month
+        
+        while current_month <= to_date_obj.month:
+            # Map calendar month to quarter position (1, 2, or 3)
+            month_position = current_month - quarter_start_month + 1
+            if month_position not in selected_months:
+                selected_months.append(month_position)
+            current_month += 1
+        
+        return sorted(selected_months)
+    
+    def get_month_position_for_date(self, date_obj, selected_from_date, selected_to_date):
+        """
+        Determine which month position (1, 2, or 3) within the quarter an invoice date falls into,
+        based on the selected date range.
+        """
+        from_date_obj = self.parse_date_string(selected_from_date)
+        to_date_obj = self.parse_date_string(selected_to_date)
+        invoice_date = self.parse_date_string(date_obj)
+        
+        if not from_date_obj or not to_date_obj or not invoice_date:
+            return '1'
+        
+        # Check if invoice is outside selected range
+        if invoice_date < from_date_obj or invoice_date > to_date_obj:
+            return '0'  # Outside range
+        
+        quarter = self.get_quarter_from_date(invoice_date)
+        quarter_start_month, _ = self.get_quarter_month_range(quarter)
+        
+        # Get month position within quarter (1, 2, or 3)
+        month_position = invoice_date.month - quarter_start_month + 1
+        
+        return str(max(1, min(3, month_position)))  # Clamp to 1-3
+    
+    def fetch_period_dates_range(self, from_date, to_date):
+        """
+        Fetch formatted period dates for the selected range.
+        Returns array: [from_year_2digit, from_month_padded, to_month_padded, from_day, to_day, full_year, from_month_num]
+        """
+        from datetime import datetime, timedelta
+        
+        from_date_obj = self.parse_date_string(from_date)
+        to_date_obj = self.parse_date_string(to_date)
+        
+        if not from_date_obj or not to_date_obj:
+            return []
+        
+        # Normalize dates
+        from_normalized = from_date_obj.replace(day=1)
+        next_month = to_date_obj.replace(day=28) + timedelta(days=4)
+        last_day = (next_month - timedelta(days=next_month.day)).day
+        to_normalized = to_date_obj.replace(day=last_day)
+        
+        from_month = str(from_normalized.month).zfill(2)
+        to_month = str(to_normalized.month).zfill(2)
+        
+        return [
+            str(from_normalized.year)[2:],  # 2-digit year
+            from_month,                      # from month (padded)
+            to_month,                        # to month (padded)
+            '01',                            # from day (always 1st)
+            str(last_day).zfill(2),          # to day (last day of month)
+            str(from_normalized.year),       # full year
+            str(from_normalized.month)       # from month number
+        ]
 
     
 class bir_signee_setup(models.Model):

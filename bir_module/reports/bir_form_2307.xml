@@ -42,6 +42,8 @@
 		<t t-set="_debug" t-value="env['account.move']._log_company_debug('form_2307', raw_company_id, context_company_ids, company_id)"/>
 		
 			<t t-set="report_id" t-value="request.params.get('id', id)"/>
+			<t t-set="report_from_date" t-value="request.params.get('from_date', '')"/>
+			<t t-set="report_to_date" t-value="request.params.get('to_date', '')"/>
 			<t t-set="report_month" t-value="request.params.get('month', month)"/>
 			<t t-set="report_trigger" t-value="request.params.get('trigger', trigger)"/>
 			<t t-set="report_tranid" t-value="request.params.get('tranid', tranid)"/>
@@ -50,10 +52,18 @@
 			<!-- Parse JSON array of selected move IDs from frontend checkboxes -->
 			<t t-set="checked_ids" t-value="env['account.move']._parse_checked_ids(checked_ids_param)"/>
 			<!-- Fetch form data, filtered by selected records if checkboxes were used -->
-		<t t-set="values" t-value="env['account.move'].x_get_2307_data([[int(report_id), report_month], 'not_transactional', report_trigger, '2307-Quarterly', report_tranid, search_param, checked_ids, company_id])"/>
+		<t t-set="values" t-value="env['account.move'].x_get_2307_data([[int(report_id), report_from_date or report_month, report_to_date], 'not_transactional', report_trigger, '2307-Quarterly', report_tranid, search_param, checked_ids, company_id])"/>
 			<t t-set='company' t-value="request.env['res.company'].search([('id', '=', company_id)])"/>
 			<t t-set='payor' t-value="request.env['res.partner'].search([('id', '=', company.partner_id.id)])"/>
 			<t t-set='payee' t-value="request.env['res.partner'].search([('id', '=', int(report_id))])"/>
+
+			<!-- Handle period dates - use new date range or fallback to month -->
+			<t t-if="report_from_date and report_to_date">
+				<t t-set="period" t-value="env['account.move'].fetch_period_dates_range(report_from_date, report_to_date)"/>
+			</t>
+			<t t-else="">
+				<t t-set="period" t-value="env['account.move'].fetch_period_dates(report_month) if report_month else []"/>
+			</t>
 
 			<!-- OFFSET CONTROLS - Adjust these to move the entire form -->
 			<t t-set="offset_top" t-value="5"/>     <!-- Add/subtract mm to move everything up/down -->
@@ -63,7 +73,7 @@
 				<div style="background-image: url('/bir_module/static/img/2307.jpg'); background-repeat: no-repeat; background-size: 262mm 392mm; width: 262mm; height: 392mm; position: absolute; top: 0; left: 0;">
 
 					<!-- Part I - For the Period -->
-					<t t-set="period" t-value="env['account.move'].fetch_period_dates(report_month) if report_month else []"/>
+					<!-- Period is already set above, no need to recalculate -->
 					
 					<!-- From: Month Day Year -->
 					<div class="left" t-attf-style="position: absolute;  top: #{39 + offset_top}mm; left: #{68 + offset_left}mm;letter-spacing:11px; font-size:11pt;">
@@ -141,7 +151,7 @@
 
 					<!-- Part III - Details of Income Payments and Taxes Withheld -->
 					<t t-if="len(values[0]) > 0">
-						<t t-set="processed" t-value="env['account.move'].process_2307_quarterly(values[0])"/>
+						<t t-set="processed" t-value="env['account.move'].process_2307_quarterly(values[0], report_from_date or report_month, report_to_date)"/>
 						<div t-attf-style="position: absolute; top: #{155 + offset_top}mm; left: #{7 + offset_left}mm; width: 262mm; font-size: 10pt; line-height: 1.4;">
 							<t t-foreach="processed" t-as="val">
 								<div style="display: table; margin-bottom: 2mm; padding-top: 0.5mm">

@@ -27,7 +27,11 @@
 			<t t-set='company' t-value="request.env['res.company'].search([('id', '=', company_id)])"/>
 			<t t-set='payor' t-value="request.env['res.partner'].search([('id', '=', company.partner_id.id)])"/>
 
-			<t t-set="values" t-value="env['account.move'].x_get_2307_data([[id, month], 'not_transactional', 'reprint', type, tranid])"/>
+			<!-- Support new date range parameters -->
+			<t t-set="from_date" t-value="request.params.get('from_date', '')"/>
+			<t t-set="to_date" t-value="request.params.get('to_date', '')"/>
+			
+			<t t-set="values" t-value="env['account.move'].x_get_2307_data([[id, from_date or month, to_date], 'not_transactional', 'reprint', type, tranid])"/>
 			<t t-set="to_process" t-value="values"/>
 			
 
@@ -40,7 +44,12 @@
 					<!--upper container-->
 					<div class="container" style="position: relative;text-align: left; color: black; top:90px; width:100%;">
 						<t t-if="type == '2307-Quarterly'">
-							<t t-set="period" t-value="env['account.move'].fetch_period_dates(month)"/>
+							<t t-if="from_date and to_date">
+								<t t-set="period" t-value="env['account.move'].fetch_period_dates_range(from_date, to_date)"/>
+							</t>
+							<t t-else="">
+								<t t-set="period" t-value="env['account.move'].fetch_period_dates(month)"/>
+							</t>
 							<div class="left" style="position: absolute; top:80px; left:265px;letter-spacing:8px; font-size:21px; width:300px;"><t t-esc="period[1]+' 01 '+period[5]"/></div>
 							<div class="right" style="position: absolute; top:80px; left:725px;letter-spacing:8px; font-size:21px; width:300px;"><t t-esc="period[2]+' '+period[4]+' '+period[5]"/></div>
 						</t>
@@ -70,14 +79,13 @@
 						<div class="left" style="position: absolute; top:445px; left:55px;"><t t-esc="payor.name or ''"/></div>
 						<div class="left" style="position: absolute; top:500px; left:55px;"><small><t t-esc="payor.contact_address_complete"/></small></div>
 						<div class="right" style="position: absolute; top:497px; left: 988px; letter-spacing: 5px; font-size: 21px" ><t t-esc="payor.zip"/></div>
-
 						<!-- <t t-set="processed" t-value="env['account.move'].process_2307_quarterly(values[0])"/>
 						<div style="width:200mm;text-align:center;padding-top:900px;"><t t-esc='processed'/></div> -->
 							
 					</div>
 
 					<t t-if="len(values[0]) > 0">
-						<t t-set="processed" t-value="env['account.move'].process_2307_quarterly(values[0])"/>
+						<t t-set="processed" t-value="env['account.move'].process_2307_quarterly(values[0], from_date or month, to_date)"/>
 						<div class="container" style="padding-top:188.5mm;font-size:15px;padding-left:50px;width:100%; position: absolute;">
 							<t t-foreach="processed" t-as="val">
 								<div class="row">
