@@ -1011,11 +1011,14 @@ class bir_reports(models.Model):
         self._cr.execute(query)
         val = self._cr.fetchall()
         
-        # Fetch tags for each partner
+        # Fetch tags for each partner using sudo to bypass security checks
         result = []
         for partner_id, partner_name in val:
-            partner = self.env['res.partner'].browse(partner_id)
-            tags = [tag.name for tag in partner.category_id]
+            try:
+                partner = self.env['res.partner'].sudo().browse(partner_id)
+                tags = [tag.name for tag in partner.category_id]
+            except Exception:
+                tags = []
             result.append([partner_id, partner_name, tags])
 
         return result
