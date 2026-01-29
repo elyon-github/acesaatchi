@@ -20,7 +20,10 @@
 	<template id="form_2307_preview">
 		<t t-call='web.basic_layout'>
 
-			<t t-set="company_id" t-value="env['account.move'].x_fetch_company_id()"/>
+			<!-- Get company_id from context (user's active company) -->
+			<t t-set="context_company_ids" t-value="env.context.get('allowed_company_ids', [])"/>
+			<t t-set="company_id" t-value="context_company_ids[0] if context_company_ids else 1"/>
+			<t t-set="_debug" t-value="env['account.move']._log_company_debug('form_2307_preview', '', context_company_ids, company_id)"/>
 			<t t-set='company' t-value="request.env['res.company'].search([('id', '=', company_id)])"/>
 			<t t-set='payor' t-value="request.env['res.partner'].search([('id', '=', company.partner_id.id)])"/>
 

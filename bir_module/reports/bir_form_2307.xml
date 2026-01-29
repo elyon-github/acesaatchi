@@ -33,7 +33,14 @@
 	<template id="form_2307">
 		<t t-call='web.basic_layout'>
 
-			<t t-set="company_id" t-value="env['account.move'].x_fetch_company_id()"/>
+		<!-- Get company_id from URL params or context -->
+		<t t-set="raw_company_id" t-value="request.params.get('company_id', '')"/>
+		<t t-set="context_company_ids" t-value="env.context.get('allowed_company_ids', [])"/>
+		<t t-set="company_id" t-value="int(raw_company_id) if raw_company_id else (context_company_ids[0] if context_company_ids else 1)"/>
+		
+		<!-- DEBUG: Log to server -->
+		<t t-set="_debug" t-value="env['account.move']._log_company_debug('form_2307', raw_company_id, context_company_ids, company_id)"/>
+		
 			<t t-set="report_id" t-value="request.params.get('id', id)"/>
 			<t t-set="report_month" t-value="request.params.get('month', month)"/>
 			<t t-set="report_trigger" t-value="request.params.get('trigger', trigger)"/>
@@ -43,7 +50,7 @@
 			<!-- Parse JSON array of selected move IDs from frontend checkboxes -->
 			<t t-set="checked_ids" t-value="env['account.move']._parse_checked_ids(checked_ids_param)"/>
 			<!-- Fetch form data, filtered by selected records if checkboxes were used -->
-			<t t-set="values" t-value="env['account.move'].x_get_2307_data([[int(report_id), report_month], 'not_transactional', report_trigger, '2307-Quarterly', report_tranid, search_param, checked_ids])"/>
+		<t t-set="values" t-value="env['account.move'].x_get_2307_data([[int(report_id), report_month], 'not_transactional', report_trigger, '2307-Quarterly', report_tranid, search_param, checked_ids, company_id])"/>
 			<t t-set='company' t-value="request.env['res.company'].search([('id', '=', company_id)])"/>
 			<t t-set='payor' t-value="request.env['res.partner'].search([('id', '=', company.partner_id.id)])"/>
 			<t t-set='payee' t-value="request.env['res.partner'].search([('id', '=', int(report_id))])"/>
@@ -53,9 +60,8 @@
 			<t t-set="offset_left" t-value="-5"/>    <!-- Add/subtract mm to move everything left/right -->
 
 			<div class="page" style="width: 260mm; height: 390mm; margin: 0; padding: 0; position: relative;">
-
 				<div style="background-image: url('/bir_module/static/img/2307.jpg'); background-repeat: no-repeat; background-size: 262mm 392mm; width: 262mm; height: 392mm; position: absolute; top: 0; left: 0;">
-					
+
 					<!-- Part I - For the Period -->
 					<t t-set="period" t-value="env['account.move'].fetch_period_dates(report_month) if report_month else []"/>
 					
@@ -94,7 +100,7 @@
 					<div t-attf-style="position: absolute; top: #{65 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; white-space: nowrap;">
 					<t t-esc="(payee.name or '').replace('| Trade', '').strip() if payee.name else ''"/>
 				</div>
-					<div t-attf-style="position: absolute; top: #{78 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; white-space: nowrap;">
+					<div t-attf-style="position: absolute; top: #{78 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 9pt; white-space: nowrap;">
 						<t t-esc="payee.contact_address_complete"/>
 					</div>
 					
@@ -124,7 +130,7 @@
 					<div t-attf-style="position: absolute; top: #{117 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 10pt; white-space: nowrap;">
 					<t t-esc="(payor.name or '').replace('| Trade', '').strip() if payor.name else ''"/>
 				</div>
-					<div t-attf-style="position: absolute; top: #{130 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 11pt; white-space: nowrap;">
+					<div t-attf-style="position: absolute; top: #{130 + offset_top}mm; left: #{14 + offset_left}mm; font-size: 9pt; white-space: nowrap;">
 						<t t-esc="payor.contact_address_complete"/>
 					</div>
 					

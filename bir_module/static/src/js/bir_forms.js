@@ -30,6 +30,7 @@ export class Form2307 extends Component {
   setup() {
     this.orm = useService("orm");
     this.action = useService("action");
+    this.companyService = useService("company");  // Get company service
     this.rootRef = useRef("root");
 
     // Component state for managing form and UI
@@ -199,10 +200,13 @@ export class Form2307 extends Component {
     const BP = this.state.selectedPartner;
     const search = this.state.searchTerm || "";
     const checkedIds = Array.from(this.state.checkedIds);
+    const currentCompanyId = this.companyService.currentCompany.id;  // Get current company from service
+
+    console.log("DEBUG: Current Company ID:", currentCompanyId);  // Debug log
 
     const data = await this.orm.call("account.move", "x_2307_forms", [
       "",
-      { month: current, id: BP, trigger: "print", tranid: "none", search: search, checked_ids: checkedIds, signee_id: this.state.selectedSignee },
+      { month: current, id: BP, trigger: "print", tranid: "none", search: search, checked_ids: checkedIds, signee_id: this.state.selectedSignee, company_id: currentCompanyId },
     ]);
     this.action.doAction(data);
   }
@@ -434,6 +438,7 @@ export class Form2307 extends Component {
     const BP = this.state.selectedPartner;
     const search = this.state.searchTerm || "";
     const checkedIds = Array.from(this.state.checkedIds);
+    const currentCompanyId = this.companyService.currentCompany.id;  // Get current company from service
 
     // Show loading animation before updating preview
     this.showPreviewLoading();
@@ -445,6 +450,7 @@ export class Form2307 extends Component {
     params.append('trigger', 'view');
     params.append('search', search);
     params.append('checked_ids', JSON.stringify(checkedIds));
+    params.append('company_id', currentCompanyId);  // Add company_id to preview URL
     
     const url = "/report/pdf/bir_module.form_2307/?" + params.toString();
     

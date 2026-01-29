@@ -39,12 +39,20 @@ class atc_setup(models.Model):
 
     name = fields.Char(required=True)
     tax_id = fields.Many2one('account.tax', required=True)
+    company_id = fields.Many2one('res.company', string='Company', required=True, 
+                                  default=lambda self: self.env.company)
     description = fields.Char()
     scope = fields.Selection(
         [('sales', 'Sales'), ('purchase', 'Purchases')], required=True)
     remarks = fields.Char()
     atc_code_company = fields.Char(string='ATC Code - Company (WC)', help='ATC code for corporate/company vendors')
     atc_code_individual = fields.Char(string='ATC Code - Individual (WI)', help='ATC code for individual vendors')
+
+    @api.onchange('tax_id')
+    def _onchange_tax_id(self):
+        """Auto-fill company based on the selected tax"""
+        if self.tax_id:
+            self.company_id = self.tax_id.company_id
 
 
 class bir_add_partner_field(models.Model):
@@ -107,11 +115,19 @@ class bir_reports(models.Model):
     def x_2307_forms(self, args):
         import json
         from urllib.parse import urlencode
+        import logging
+        logger = logging.getLogger(__name__)
+        
         search = args.get('search', '')
         checked_ids = args.get('checked_ids', [])
         signee_id = args.get('signee_id', 0)
+        # Get company_id from args (passed from frontend) or use user's current company
+        company_id = args.get('company_id', self.env.user.company_id.id)
         
-        # Build URL with search and checked_ids parameters
+        # Debug logging
+        logger.warning(f"DEBUG x_2307_forms: args company_id={args.get('company_id', 'NOT PROVIDED')}, fallback company_id={self.env.user.company_id.id}, final company_id={company_id}")
+        
+        # Build URL with search, checked_ids, and company_id parameters
         url_params = {
             'id': args['id'],
             'month': args['month'],
@@ -119,10 +135,13 @@ class bir_reports(models.Model):
             'tranid': args['tranid'],
             'search': search,
             'checked_ids': json.dumps(checked_ids) if checked_ids else '[]',
-            'signee_id': signee_id
+            'signee_id': signee_id,
+            'company_id': company_id
         }
         
         url = f"/report/pdf/bir_module.form_2307/?{urlencode(url_params)}"
+        
+        logger.warning(f"DEBUG URL: {url}")
         
         return {
             'type': 'ir.actions.act_url',
@@ -134,15 +153,17 @@ class bir_reports(models.Model):
         data = []
         search = args[5] if len(args) > 5 else ""
         checked_ids = args[6] if len(args) > 6 else []
+        # Extract company_id if provided in args (7th element), otherwise use env.company
+        company_id = args[7] if len(args) > 7 else self.env.company.id
 
         if args[2] == 'reprint':
-            transactional = self._2307_query_reprint(args)
+            transactional = self._2307_query_reprint(args, company_id)
             data.append(transactional)
         # elif args[2] == 'ammend' or args[2] == 'ammend_view':
         #     transactional = self._2307_query_ammend(args)
         #     data.append(transactional)
         else:
-            transactional = self._2307_query_normal(args, search, checked_ids)
+            transactional = self._2307_query_normal(args, search, checked_ids, company_id)
             data.append(transactional)
 
         if args[2] == 'table':
@@ -155,7 +176,10 @@ class bir_reports(models.Model):
 
         return data
 
-    def _2307_query_reprint(self, args):
+    def _2307_query_reprint(self, args, company_id=None):
+        if company_id is None:
+            company_id = self.env.company.id
+            
         query = """ SELECT Abs(T1.price_subtotal)*(Abs(T3.amount)/100), T1.price_subtotal, T5.name, T5.vat, T4.name, T3.name,
             T0.id, T0.move_type, T0.name, amount_total, amount_untaxed, T0.invoice_date, T5.id  
             FROM bir_module_print_history_line T6 
@@ -165,9 +189,9 @@ class bir_reports(models.Model):
             JOIN account_tax T3 ON T2.account_tax_id = T3.id 
             JOIN bir_module_atc_setup T4 ON T3.id = T4.tax_id 
             JOIN res_partner T5 ON T0.partner_id = T5.id 
-            WHERE T0.state='posted' AND T6.print_id = '{0}'"""
+            WHERE T0.state='posted' AND T6.print_id = '{0}' AND T0.company_id = {1}"""
 
-        self._cr.execute(query.format(args[4]))
+        self._cr.execute(query.format(args[4], company_id))
         val = self._cr.fetchall()
 
         return val
@@ -202,7 +226,7 @@ class bir_reports(models.Model):
 
     #     return val
 
-    def _2307_query_normal(self, args, search="", checked_ids=[]):
+    def _2307_query_normal(self, args, search="", checked_ids=[], company_id=None):
         """Build and execute query for BIR 2307 form data
         
         Filters by:
@@ -210,15 +234,20 @@ class bir_reports(models.Model):
         - Selected partner
         - Search term (bill name/number)
         - Checkbox-selected records (if any provided)
+        - Company ID (if provided)
         
         Args:
             args: [partner_id, month] from form
             search: Search term to filter bills by name
             checked_ids: List of selected move IDs from checkboxes (empty = all records)
+            company_id: Company ID to filter invoices by
             
         Returns:
             List of tuples containing invoice data for processing
         """
+        if company_id is None:
+            company_id = self.env.company.id
+            
         query = """ SELECT Abs(T1.price_subtotal)*(Abs(T3.amount)/100), T1.price_subtotal, T5.name, T5.vat, 
             CASE WHEN T5.is_company THEN T4.atc_code_company ELSE T4.atc_code_individual END, T4.description,
             T0.id, T0.move_type, T0.name, T0.amount_total, T0.amount_untaxed, T0.invoice_date, T0.invoice_date_due, T0.payment_state {2} 
@@ -233,7 +262,7 @@ class bir_reports(models.Model):
 
         end_parameter = self._2307_params(trans=args[1], id=args[0], search=search, checked_ids=checked_ids)
 
-        self._cr.execute(query.format(self.env.company.id,
+        self._cr.execute(query.format(company_id,
                          end_parameter[0], end_parameter[1], end_parameter[2]))
         val = self._cr.fetchall()
 
@@ -1178,8 +1207,25 @@ class bir_reports(models.Model):
         return val
 
     def x_fetch_company_id(self):
-        return self.env.company.id
+        """Return the user's currently active company ID from their session"""
+        return self.env.user.company_id.id
+    
+    def _log_company_debug(self, template_name, raw_company_id, context_company_ids, company_id):
+        """Debug helper to log company context information"""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"BIR 2307 {template_name}: raw_company_id={raw_company_id}, context_company_ids={context_company_ids}, final_company_id={company_id}, env.company={self.env.company.id}, env.user.company_id={self.env.user.company_id.id}")
+        return True
+    
+    def _debug_2307_template(self, raw_company_id, context_company_ids, company_id):
+        """Debug helper for template to log values"""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"DEBUG TEMPLATE: raw_company_id={raw_company_id}, context_company_ids={context_company_ids}, final_company_id={company_id}, env.company={self.env.company.id}")
+        return True
+    
 
+    
 class bir_signee_setup(models.Model):
     _name = 'bir_module.signee_setup'
     _description = 'BIR Signee / Authorized Representative Setup'
