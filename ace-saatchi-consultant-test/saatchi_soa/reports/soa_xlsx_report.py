@@ -271,8 +271,8 @@ class SaatchiXLSX(models.AbstractModel):
         # Get current date for report
         report_date = datetime.datetime.now().strftime('%B %d, %Y').upper()
 
-        # Generate a sheet per partner
-        for partner_name, currencies in by_partner.items():
+        # Generate a sheet per partner (sorted alphabetically)
+        for partner_name, currencies in sorted(by_partner.items()):
             # Create sheet (max 31 chars for sheet name)
             sheet = workbook.add_worksheet(partner_name[:31])
 
