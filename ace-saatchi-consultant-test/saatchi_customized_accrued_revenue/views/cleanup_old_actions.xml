@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="0">
+        
+        <!-- Force delete old cached action -->
+        <delete model="ir.actions.act_window" search="[('id', '=', ref('saatchi_accrual_config_action'))]"/>
+        
+    </data>
+</odoo>

@@ -259,9 +259,9 @@ class bir_reports(models.Model):
         if company_id is None:
             company_id = self.env.company.id
             
-        query = """ SELECT Abs(T1.price_subtotal)*(Abs(T3.amount)/100), T1.price_subtotal, T5.name, T5.vat, 
+        query = """ SELECT T0.id, T0.amount_untaxed, T5.name, T5.vat, 
             CASE WHEN T5.is_company THEN T4.atc_code_company ELSE T4.atc_code_individual END, T4.description,
-            T0.id, T0.move_type, T0.name, T0.amount_total, T0.amount_untaxed, T0.invoice_date, T0.invoice_date_due, T0.payment_state {2} 
+            T0.id, T0.move_type, T0.name, T0.amount_total, T0.amount_untaxed, T0.invoice_date, T0.invoice_date_due, T0.payment_state, T3.id
             FROM account_move T0 
             JOIN account_move_line T1 ON T0.id = T1.move_id  
             JOIN account_move_line_account_tax_rel T2 ON T1.id = T2.account_move_line_id 
@@ -269,7 +269,8 @@ class bir_reports(models.Model):
             JOIN bir_module_atc_setup T4 ON T3.id = T4.tax_id 
             JOIN res_partner T5 ON T0.partner_id = T5.id 
             {3} 
-            WHERE T0.state='posted' AND T0.company_id = {0} AND T0.move_type = 'in_invoice' {1}"""
+            WHERE T0.state='posted' AND T0.company_id = {0} AND T0.move_type = 'in_invoice' {1}
+            GROUP BY T0.id, T0.amount_untaxed, T5.name, T5.vat, T5.is_company, T4.atc_code_company, T4.atc_code_individual, T4.description, T0.move_type, T0.name, T0.amount_total, T0.invoice_date, T0.invoice_date_due, T0.payment_state, T3.id"""
 
         end_parameter = self._2307_params(trans=args[1], id=args[0], search=search, checked_ids=checked_ids)
 
@@ -339,82 +340,180 @@ class bir_reports(models.Model):
     def process_2307_quarterly(self, data, from_date=None, to_date=None):
         """
         Process 2307 quarterly data. 
-        If from_date and to_date are provided, use them to map month positions.
-        Otherwise, fall back to legacy month_num calculation.
+        Fetches tax_totals via ORM to find WHT amount for the specific tax linked in ATC setup.
         """
-        cont = []
-        temp_out = ()
+        import json
+        
+        # Group data by ATC code and move_id (vendor bill)
+        bill_groups = {}
+        move_ids = set()
+        
+        for dat in data:
+            move_ids.add(dat[6])  # T0.id - invoice/bill ID
+        
+        # Fetch all move records via ORM to get tax_totals field
+        moves = self.env['account.move'].browse(list(move_ids))
+        move_tax_totals = {move.id: move.tax_totals for move in moves}
+        
+        for dat in data:
+            atc = dat[4]  # ATC code
+            move_id = dat[6]  # Invoice/bill ID (T0.id)
+            untaxed_amount = dat[1]  # amount_untaxed
+            tax_id_in_atc = dat[14]  # T3.id - the tax_id from ATC setup
+            invoice_date = dat[11]
+            desc = dat[5]
+            code = dat[4]
+            
+            # Get tax_totals from ORM
+            tax_totals = move_tax_totals.get(move_id)
+            wht_amount = 0
+            
+            if tax_totals:
+                try:
+                    if isinstance(tax_totals, str):
+                        tax_totals = json.loads(tax_totals)
+                    
+                    # Search through tax groups to find the one matching our tax_id
+                    if 'subtotals' in tax_totals and len(tax_totals['subtotals']) > 0:
+                        for subtotal in tax_totals['subtotals']:
+                            if 'tax_groups' in subtotal:
+                                for tax_group in subtotal['tax_groups']:
+                                    # Check if this tax group's involved_tax_ids contains our tax_id
+                                    if 'involved_tax_ids' in tax_group:
+                                        if tax_id_in_atc in tax_group['involved_tax_ids']:
+                                            wht_amount = abs(tax_group.get('tax_amount', 0))
+                                            break
+                except Exception as e:
+                    wht_amount = 0
+            
+            if atc not in bill_groups:
+                bill_groups[atc] = {}
+            
+            if move_id not in bill_groups[atc]:
+                bill_groups[atc][move_id] = {
+                    'wht': wht_amount,
+                    'untaxed': untaxed_amount,
+                    'date': invoice_date,
+                    'desc': desc,
+                    'code': code
+                }
+        
+        # Now process by ATC and sum WHT amounts
         final = []
-
-        for val in data:
-            cont.append(val[4])
-
-            temp_in = set(cont)
-            temp_out = tuple(temp_in)
-
-        for atc in temp_out:
+        
+        for atc, bills in bill_groups.items():
             dict = {'desc': '', 'code': '', 'm1': 0,
                     'm2': 0, 'm3': 0, 'taxed': 0, 'm_total': 0}
-
-            for dat in data:
-                if atc == dat[4]:
-                    # Use date range mapping if provided, otherwise use legacy method
-                    if from_date and to_date:
-                        month_num = self.get_month_position_for_date(dat[11], from_date, to_date)
-                    else:
-                        month_num = self.get_bir_month_num(dat[11])  # Legacy: Changed from dat[10] to dat[11] to get invoice_date
-
-                    # Only include invoices that are within the selected date range
-                    if month_num != '0':  # '0' means outside selected range
-                        if month_num == '1':
-                            dict['m1'] += dat[1]
-                        elif month_num == '2':
-                            dict['m2'] += dat[1]
-                        elif month_num == '3':
-                            dict['m3'] += dat[1]
-
-                        # Only add to totals if invoice is within selected range
-                        dict['taxed'] += dat[0]
-                        dict['m_total'] += dat[1]
+            
+            for move_id, bill_data in bills.items():
+                # Use date range mapping if provided, otherwise use legacy method
+                if from_date and to_date:
+                    month_num = self.get_month_position_for_date(bill_data['date'], from_date, to_date)
+                else:
+                    month_num = self.get_bir_month_num(bill_data['date'])
+                
+                # Only include invoices that are within the selected date range
+                if month_num != '0':  # '0' means outside selected range
+                    if month_num == '1':
+                        dict['m1'] += bill_data['untaxed']
+                    elif month_num == '2':
+                        dict['m2'] += bill_data['untaxed']
+                    elif month_num == '3':
+                        dict['m3'] += bill_data['untaxed']
                     
-                    dict['desc'] = dat[5]
-                    dict['code'] = dat[4]
+                    # Use actual WHT from tax_totals
+                    dict['taxed'] += bill_data['wht']
+                    dict['m_total'] += bill_data['untaxed']
+            
+            dict['desc'] = bill_data['desc']
+            dict['code'] = bill_data['code']
             final.append(dict)
-
+        
         return final
 
     def process_2307_transactional(self, data):
-        cont = []
-        temp_out = ()
+        """
+        Process 2307 transactional data.
+        Fetches tax_totals via ORM to find WHT amount for the specific tax linked in ATC setup.
+        """
+        import json
+        
+        # Group data by ATC code and move_id (vendor bill)
+        bill_groups = {}
+        move_ids = set()
+        
+        for dat in data[0]:
+            move_ids.add(dat[6])  # T0.id - invoice/bill ID
+        
+        # Fetch all move records via ORM to get tax_totals field
+        moves = self.env['account.move'].browse(list(move_ids))
+        move_tax_totals = {move.id: move.tax_totals for move in moves}
+        
+        for dat in data[0]:
+            atc = dat[4]  # ATC code
+            move_id = dat[6]  # Invoice/bill ID (T0.id)
+            untaxed_amount = dat[1]  # amount_untaxed
+            tax_id_in_atc = dat[14]  # T3.id - the tax_id from ATC setup
+            desc = dat[5]
+            code = dat[4]
+            
+            # Get tax_totals from ORM
+            tax_totals = move_tax_totals.get(move_id)
+            wht_amount = 0
+            
+            if tax_totals:
+                try:
+                    if isinstance(tax_totals, str):
+                        tax_totals = json.loads(tax_totals)
+                    
+                    # Search through tax groups to find the one matching our tax_id
+                    if 'subtotals' in tax_totals and len(tax_totals['subtotals']) > 0:
+                        for subtotal in tax_totals['subtotals']:
+                            if 'tax_groups' in subtotal:
+                                for tax_group in subtotal['tax_groups']:
+                                    # Check if this tax group's involved_tax_ids contains our tax_id
+                                    if 'involved_tax_ids' in tax_group:
+                                        if tax_id_in_atc in tax_group['involved_tax_ids']:
+                                            wht_amount = abs(tax_group.get('tax_amount', 0))
+                                            break
+                except Exception as e:
+                    wht_amount = 0
+            
+            if atc not in bill_groups:
+                bill_groups[atc] = {}
+            
+            if move_id not in bill_groups[atc]:
+                bill_groups[atc][move_id] = {
+                    'wht': wht_amount,
+                    'untaxed': untaxed_amount,
+                    'desc': desc,
+                    'code': code
+                }
+        
+        # Process by ATC using actual WHT from tax_totals
         final = []
-
-        for val in data[0]:
-            cont.append(val[4])
-
-            temp_in = set(cont)
-            temp_out = tuple(temp_in)
-
-        for atc in temp_out:
+        month_num = self.get_bir_month_num(data[1])
+        
+        for atc, bills in bill_groups.items():
             dict = {'desc': '', 'code': '', 'm1': 0,
                     'm2': 0, 'm3': 0, 'taxed': 0, 'm_total': 0}
-
-            for dat in data[0]:
-                if atc == dat[4]:
-                    month_num = self.get_bir_month_num(data[1])
-
-                    if month_num == '1':
-                        dict['m1'] += dat[1]
-                    elif month_num == '2':
-                        dict['m2'] += dat[1]
-                    elif month_num == '3':
-                        dict['m3'] += dat[1]
-
-                    dict['taxed'] += dat[0]
-                    dict['m_total'] += dat[1]
-                    dict['desc'] = dat[5]
-                    dict['code'] = dat[4]
+            
+            for move_id, bill_data in bills.items():
+                if month_num == '1':
+                    dict['m1'] += bill_data['untaxed']
+                elif month_num == '2':
+                    dict['m2'] += bill_data['untaxed']
+                elif month_num == '3':
+                    dict['m3'] += bill_data['untaxed']
+                
+                # Use actual WHT from tax_totals
+                dict['taxed'] += bill_data['wht']
+                dict['m_total'] += bill_data['untaxed']
+                dict['desc'] = bill_data['desc']
+                dict['code'] = bill_data['code']
+            
             final.append(dict)
-
+        
         return final
 
     def process_2307_ammend(self, data):

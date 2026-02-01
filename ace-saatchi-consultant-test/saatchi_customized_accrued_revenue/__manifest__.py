@@ -23,6 +23,9 @@ Long description of module's purpose
     # always loaded
     'data': [
         'security/ir.model.access.csv',
+        'security/accrual_config_rules.xml',
+        'views/cleanup_old_actions.xml',
+        'views/accrual_config_views.xml',
         'views/views.xml',
         'views/inherited_views.xml',
         'wizard/accrued_revenue_duplicate_checker_wizard_view.xml',

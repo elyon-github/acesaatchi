@@ -13,6 +13,7 @@ Main Features:
 - Automatic reversal entries (for normal accruals only)
 - Multi-currency support
 - Analytic distribution tracking
+- ✓ MULTI-COMPANY SUPPORT (via saatchi.accrual_config model)
 
 Business Logic:
 - Normal accruals: Dr. Accrued Revenue (1210) | Cr. Revenue Accounts (with auto-reversal)
@@ -22,6 +23,96 @@ Business Logic:
 from odoo import models, fields, api, _, Command
 from odoo.exceptions import UserError
 from dateutil.relativedelta import relativedelta
+import logging
+
+_logger = logging.getLogger(__name__)
+
+
+class SaatchiAccrualConfig(models.Model):
+    """
+    Multi-Company Accrual Configuration
+    
+    Stores company-specific settings for accrued revenue management:
+    - Journal for accrual entries
+    - Accrued revenue account (1210)
+    - Digital income account for adjustments (5787)
+    """
+    _name = 'saatchi.accrual_config'
+    _description = 'Saatchi Accrual Configuration'
+    _rec_name = 'company_id'
+    
+    company_id = fields.Many2one(
+        'res.company',
+        string='Company',
+        required=True,
+        unique=True,
+        ondelete='cascade',
+        index=True,
+        default=lambda self: self.env.company,
+        help='Company for which this accrual configuration applies'
+    )
+    
+    accrued_journal_id = fields.Many2one(
+        'account.journal',
+        string='Accrual Journal',
+        required=True,
+        domain=[('type', '=', 'general')],
+        help='General journal for posting accrual entries'
+    )
+    
+    accrued_revenue_account_id = fields.Many2one(
+        'account.account',
+        string='Accrued Revenue Account',
+        required=True,
+        domain=[('deprecated', '=', False)],
+        help='Account 1210 - Accrued Revenue (debited for normal accruals, credited for adjustments)'
+    )
+    
+    digital_income_account_id = fields.Many2one(
+        'account.account',
+        string='Digital Income Account',
+        required=True,
+        domain=[('deprecated', '=', False)],
+        help='Account 5787 - Digital Income (used for adjustment entries)'
+    )
+    
+    @api.constrains('accrued_journal_id')
+    def _check_journal_company(self):
+        """Ensure journal belongs to the configured company"""
+        for record in self:
+            if record.accrued_journal_id.company_id != record.company_id:
+                raise UserError(
+                    _('The accrual journal must belong to the selected company.')
+                )
+    
+    @api.constrains('accrued_revenue_account_id')
+    def _check_accrued_revenue_account_company(self):
+        """Ensure accrued revenue account is available for the configured company"""
+        for record in self:
+            if record.company_id not in record.accrued_revenue_account_id.company_ids:
+                raise UserError(
+                    _('The accrued revenue account must be available for the selected company.')
+                )
+    
+    @api.constrains('digital_income_account_id')
+    def _check_digital_income_account_company(self):
+        """Ensure digital income account is available for the configured company"""
+        for record in self:
+            if record.company_id not in record.digital_income_account_id.company_ids:
+                raise UserError(
+                    _('The digital income account must be available for the selected company.')
+                )
+    
+    @api.model_create_multi
+    def create(self, vals_list):
+        """Override create to ensure one config per company"""
+        for vals in vals_list:
+            existing = self.search([('company_id', '=', vals.get('company_id'))], limit=1)
+            if existing:
+                raise UserError(
+                    _('Configuration for this company already exists. Please edit the existing record.')
+                )
+        return super().create(vals_list)
 
 
 class SaatchiCustomizedAccruedRevenue(models.Model):
@@ -315,150 +406,75 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
 
         
     def _get_accrued_revenue_account_id(self):
-        """Get accrued revenue account ID with fallback"""
-        # Get company from context, fallback to current company
+        """Get accrued revenue account ID from company-specific configuration"""
         ce_company_id = self.env.context.get('default_company_id')
         target_company = self.env['res.company'].browse(ce_company_id) if ce_company_id else self.env.company
+        
         try:
-            account_id = int(self.env['ir.config_parameter'].sudo().get_param(
-                'account.accrued_revenue_account_id',
-                default='0'
-            ) or 0)
+            config = self.env['saatchi.accrual_config'].search(
+                [('company_id', '=', target_company.id)],
+                limit=1
+            )
             
-            if account_id:
-                template_account = self.env['account.account'].sudo().browse(account_id)
-                if template_account.exists() and not template_account.deprecated:
-                    # If target company is in the account's companies, use it directly
-                    if target_company in template_account.company_ids:
-                        return account_id
-                    
-                    # Otherwise, find the equivalent account in target company
-                    equivalent_account = self.env['account.account'].sudo().search([
-                        ('name', '=', template_account.name),
-                        ('company_ids', 'in', target_company.id),
-                        ('deprecated', '=', False)
-                    ], limit=1)
-                    
-                    if not equivalent_account:
-                        # Fallback: try by name
-                        equivalent_account = self.env['account.account'].sudo().search([
-                            ('name', '=', template_account.name),
-                            ('company_ids', 'in', target_company.id),
-                            ('deprecated', '=', False)
-                        ], limit=1)
-                    
-                    if equivalent_account:
-                        return equivalent_account.id
+            if config and config.accrued_revenue_account_id:
+                return config.accrued_revenue_account_id.id
             
-            # Fallback: Find miscellaneous income account
-            misc_account = self.env['account.account'].sudo().search([
-                ('account_type', '=', 'income_other'),
-                ('deprecated', '=', False),
-                ('company_ids', 'in', target_company.id)
-            ], limit=1)
+            _logger.warning(
+                f'No accrual configuration found for company {target_company.name}. '
+                'Please configure accrual settings in Accounting > Configuration > Accrual Configuration.'
+            )
+            return 0
             
-            return misc_account.id if misc_account else 0
-            
-        except (ValueError, TypeError):
+        except Exception as e:
+            _logger.error(f'Error retrieving accrued revenue account: {str(e)}')
             return 0
 
     def _get_accrued_journal_id(self):
-        """Get accrued journal ID with fallback to miscellaneous journal"""
-        # Get company from context, fallback to current company
+        """Get accrued journal ID from company-specific configuration"""
         ce_company_id = self.env.context.get('default_company_id')
         target_company = self.env['res.company'].browse(ce_company_id) if ce_company_id else self.env.company
         
         try:
-            journal_id = int(self.env['ir.config_parameter'].sudo().get_param(
-                'account.accrued_journal_id',
-                default='0'
-            ) or 0)
+            config = self.env['saatchi.accrual_config'].search(
+                [('company_id', '=', target_company.id)],
+                limit=1
+            )
             
-            if journal_id:
-                template_journal = self.env['account.journal'].sudo().browse(journal_id)
-                if template_journal.exists():
-                    # Check if journal belongs to target company (journals use company_id)
-                    if template_journal.company_id == target_company:
-                        return journal_id
-                    
-                    # Otherwise, find the equivalent journal in target company
-                    equivalent_journal = self.env['account.journal'].sudo().search([
-                        ('code', '=', template_journal.code),
-                        ('company_id', '=', target_company.id)
-                    ], limit=1)
-                    
-                    if not equivalent_journal:
-                        # Fallback: try by name
-                        equivalent_journal = self.env['account.journal'].sudo().search([
-                            ('name', '=', template_journal.name),
-                            ('company_id', '=', target_company.id)
-                        ], limit=1)
-                    
-                    if equivalent_journal:
-                        return equivalent_journal.id
+            if config and config.accrued_journal_id:
+                return config.accrued_journal_id.id
             
-            # Fallback: Find first general journal
-            misc_journal = self.env['account.journal'].sudo().search([
-                ('type', '=', 'general'),
-                ('company_id', '=', target_company.id)
-            ], limit=1)
+            _logger.warning(
+                f'No accrual configuration found for company {target_company.name}. '
+                'Please configure accrual settings in Accounting > Configuration > Accrual Configuration.'
+            )
+            return 0
             
-            return misc_journal.id if misc_journal else 0
-            
-        except (ValueError, TypeError):
+        except Exception as e:
+            _logger.error(f'Error retrieving accrued journal: {str(e)}')
             return 0
         
     def _get_adjustment_accrued_revenue_account_id(self):
-        """Get adjustment accrued revenue account ID with fallback to default receivable account"""
-        # Get company from context, fallback to current company
+        """Get digital income account ID from company-specific configuration"""
         ce_company_id = self.env.context.get('default_company_id')
         target_company = self.env['res.company'].browse(ce_company_id) if ce_company_id else self.env.company
         
         try:
-            account_id = int(self.env['ir.config_parameter'].sudo().get_param(
-                'account.accrued_default_adjustment_account_id',
-                default='0'
-            ) or 0)
+            config = self.env['saatchi.accrual_config'].search(
+                [('company_id', '=', target_company.id)],
+                limit=1
+            )
             
-            if account_id:
-                template_account = self.env['account.account'].sudo().browse(account_id)
-                if template_account.exists() and not template_account.deprecated:
-                    # If target company is in the account's companies, use it directly
-                    if target_company in template_account.company_ids:
-                        return account_id
-                    
-                    # Otherwise, find the equivalent account in target company
-                    equivalent_account = self.env['account.account'].sudo().search([
-                        ('code', '=', template_account.code),
-                        ('company_ids', 'in', target_company.id),
-                        ('deprecated', '=', False)
-                    ], limit=1)
-                    
-                    if not equivalent_account:
-                        # Fallback: try by name
-                        equivalent_account = self.env['account.account'].sudo().search([
-                            ('name', '=', template_account.name),
-                            ('company_ids', 'in', target_company.id),
-                            ('deprecated', '=', False)
-                        ], limit=1)
-                    
-                    if equivalent_account:
-                        return equivalent_account.id
+            if config and config.digital_income_account_id:
+                return config.digital_income_account_id.id
             
-            # Fallback: Use target company's default receivable account
-            receivable_account = target_company.account_default_pos_receivable_account_id
+            _logger.warning(
+                f'No accrual configuration found for company {target_company.name}. '
+                'Please configure accrual settings in Accounting > Configuration > Accrual Configuration.'
+            )
+            return 0
             
-            if not receivable_account:
-                # Alternative: Search for receivable account
-                receivable_account = self.env['account.account'].sudo().search([
-                    ('account_type', '=', 'asset_receivable'),
-                    ('deprecated', '=', False),
-                    ('company_ids', 'in', target_company.id)
-                ], limit=1)
-            
-            return receivable_account.id if receivable_account else 0
-            
-        except (ValueError, TypeError):
+        except Exception as e:
+            _logger.error(f'Error retrieving digital income account: {str(e)}')
             return 0
 
     # ========== CRUD Operations ==========
