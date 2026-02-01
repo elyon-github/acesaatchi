@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        
+        <!-- Saatchi Accrual Configuration Form View -->
+        <record id="saatchi_accrual_config_form_view" model="ir.ui.view">
+            <field name="name">Accrual Configuration Form</field>
+            <field name="model">saatchi.accrual_config</field>
+            <field name="arch" type="xml">
+                <form>
+                    <sheet>
+                        <group>
+                            <field name="company_id" readonly="true"/>
+                            <field name="accrued_journal_id" domain="[('company_id', '=', company_id), ('type', '=', 'general')]"/>
+                            <field name="accrued_revenue_account_id" domain="[('company_ids', 'in', company_id), ('deprecated', '=', False)]"/>
+                            <field name="digital_income_account_id" domain="[('company_ids', 'in', company_id), ('deprecated', '=', False)]"/>
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <!-- Saatchi Accrual Configuration List View -->
+        <record id="saatchi_accrual_config_list_view" model="ir.ui.view">
+            <field name="name">Accrual Configuration List</field>
+            <field name="model">saatchi.accrual_config</field>
+            <field name="arch" type="xml">
+                <list>
+                    <field name="company_id"/>
+                    <field name="accrued_journal_id"/>
+                    <field name="accrued_revenue_account_id"/>
+                    <field name="digital_income_account_id"/>
+                </list>
+            </field>
+        </record>
+
+        <!-- Saatchi Accrual Configuration Action -->
+        <record id="saatchi_accrual_config_action" model="ir.actions.act_window">
+            <field name="name">Accrual Configuration</field>
+            <field name="res_model">saatchi.accrual_config</field>
+            <field name="view_mode">list,form</field>
+        </record>
+
+        <!-- Menu Item: Accrual Configuration -->
+        <menuitem 
+            id="menu_saatchi_accrual_config"
+            name="Accrual Configuration"
+            parent="account.menu_finance_configuration"
+            action="saatchi_accrual_config_action"
+            sequence="20"/>
+
+    </data>
+</odoo>
