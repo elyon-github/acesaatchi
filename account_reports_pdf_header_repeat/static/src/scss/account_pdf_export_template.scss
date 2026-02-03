@@ -1,19 +1,4 @@
-/*************************************************************
-    Account Reports PDF Header Repeat Module
-    Makes headers repeat on every page in PDF exports
-*************************************************************/
-
-thead.o_repeating_header {
-    display: table-header-group;
-    page-break-after: avoid;
-}
-
-.o_repeating_header tr td {
-    padding: 10px;
-    background-color: #d8dce2;
-    border: none;
-}
-
-.o_repeating_header .o_header_font { 
-    font-size: 13px;
-}
+/* Account Reports PDF Header Repeat */
+thead.o_repeating_header { display: table-header-group; }
+.o_repeating_header tr td { padding: 10px; background-color: #d8dce2; border: none; }
+.o_repeating_header .o_header_font { font-size: 13px; }

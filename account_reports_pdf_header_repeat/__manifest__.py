@@ -11,11 +11,6 @@
         'data/pdf_export_templates.xml',
         'data/customer_reports_pdf_export_templates.xml',
     ],
-    'assets': {
-        'account_reports.assets_pdf_export': [
-            'static/src/scss/account_pdf_export_template.scss',
-        ],
-    },
     'installable': True,
     'auto_install': False,
 }
