@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Inherit and modify the existing pdf_export_main template -->
+    <template id="pdf_export_main_custom_header" inherit_id="account_reports.pdf_export_main">
+        
+        <!-- Add styles for header -->
+        <xpath expr="//head" position="inside">
+            <style>
+                .header {
+                    background-color: #d8dce2 !important;
+                    padding: 10px !important;
+                    margin-bottom: 10px !important;
+                }
+            </style>
+        </xpath>
+
+        <!-- Replace the header with our custom header that repeats on every page -->
+        <xpath expr="//header" position="replace">
+            <div class="header">
+                <div style="text-align: center; font-weight: bold; font-size: 16px; margin-bottom: 10px;">
+                    <t t-if="report.filter_show_draft and options['all_entries']">[Draft]</t>
+                    <t t-out="report_title"/>
+                </div>
+                <div class="row o_header_font">
+                    <div class="col-8">
+                        <t t-call="{{custom_templates.get('company_information', 'account_reports.company_information')}}"/>
+                    </div>
+                    <div class="col-4">
+                        <t t-set="user_tz" t-value="env.user.tz or 'UTC'"/>
+                        <t t-set="tz_offset" t-value="int(datetime.datetime.now(datetime.timezone.utc).astimezone(datetime.timezone(datetime.timedelta(hours=8))).strftime('%z')[:3]) if user_tz == 'Asia/Manila' else 0"/>
+                        <t t-set="current_time" t-value="datetime.datetime.now() + datetime.timedelta(hours=tz_offset)"/>
+                        <div style="border: 1px solid #999; padding: 8px; background-color: white; font-size: 11px; line-height: 1.6;">
+                            <div><strong>Software Name:</strong> <span>Odoo 18</span></div>
+                            <div><strong>Date Run:</strong> <span t-out="current_time.strftime('%m/%d/%Y %I:%M %p')"/></div>
+                            <div><strong>Printed By:</strong> <span t-esc="env.user.name"/></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </xpath>
+
+    </template>
+
+</odoo>
