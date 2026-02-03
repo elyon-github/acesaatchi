@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="pdf_export_main" inherit_id="account_reports.pdf_export_main" priority="100">
+        <!-- Remove the original header element -->
+        <xpath expr="//header" position="replace"/>
+        
+        <!-- Replace the table with one that has the repeating header -->
+        <xpath expr="//div[@class='d-flex align-items-start']//table[1]" position="replace">
+            <table t-attf-class="o_table  #{options.get('horizontal_split') and 'horizontal_split_page'}">
+                <!-- Single THEAD with 2 sections: Company Header + Column Headers (both repeat on every page) -->
+                <thead class="o_repeating_header" style="display: table-header-group;">
+                    <!-- Row 1: Company Header with all original header content -->
+                    <tr style="background-color: #d8dce2;">
+                        <td colspan="100">
+                            <div class="o_title">
+                                <t t-if="report.filter_show_draft and options['all_entries']">[Draft]</t>
+                                <t t-out="report_title"/>
+                            </div>
+                            <div class="row o_header_font" style="font-size: 13px; padding: 10px;">
+                                <div class="col-8">
+                                    <!-- All company information (name, address, vat, ...) -->
+                                    <t t-call="{{custom_templates.get('company_information', 'account_reports.company_information')}}"/>
+                                </div>
+                                <div class="col-4">
+                                    <!-- Software Name, Date Run, Printed By -->
+                                    <t t-set="user_tz" t-value="env.user.tz or 'UTC'"/>
+                                    <t t-set="tz_offset" t-value="int(datetime.datetime.now(datetime.timezone.utc).astimezone(datetime.timezone(datetime.timedelta(hours=8))).strftime('%z')[:3]) if user_tz == 'Asia/Manila' else 0"/>
+                                    <t t-set="current_time" t-value="datetime.datetime.now() + datetime.timedelta(hours=tz_offset)"/>
+                                    <div class="border p-3">
+                                        <div><strong>Software Name:</strong> <span>Odoo 18</span></div>
+                                        <div><strong>Date Run:</strong> <span t-out="current_time.strftime('%m/%d/%Y %I:%M %p')"/></div>
+                                        <div><strong>Printed By:</strong> <span t-esc="env.user.name"/></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- Row 2: Column Headers (from template call) -->
+                    <t t-foreach="options['column_headers']" t-as="column_header">
+                        <tr>
+                            <!-- First empty column -->
+                            <th style="padding: 10px; border: none;"/>
+
+                            <!-- Other columns -->
+                            <t t-foreach="column_header * column_headers_render_data['level_repetitions'][column_header_index]" t-as="header">
+                                <th t-att-colspan="header.get('colspan', column_headers_render_data['level_colspan'][column_header_index]) + (1 if options.get('show_horizontal_group_total') and column_header_first else 0)" class="o_overflow_name" style="padding: 10px; border: none;">
+                                    <t t-out="header.get('name')"/>
+                                </th>
+                            </t>
+
+                            <th t-if="options.get('show_horizontal_group_total') and not column_header_first" style="padding: 10px; border: none;">
+                                <t t-out="[group['name'] for group in options['available_horizontal_groups'] if group['id'] == options['selected_horizontal_group_id']][0]"/>
+                            </th>
+
+                            <th t-if="options.get('column_percent_comparison') == 'growth'" style="padding: 10px; border: none;">%</th>
+                        </tr>
+                    </t>
+                    
+                    <!-- Custom subheaders -->
+                    <t t-if="column_headers_render_data['custom_subheaders']">
+                        <tr>
+                            <!-- First empty column -->
+                            <th style="padding: 10px; border: none;"/>
+
+                            <!-- Other columns -->
+                            <t t-foreach="column_headers_render_data['custom_subheaders']" t-as="subheader">
+                                <th t-att-colspan="subheader.get('colspan', 1)" style="padding: 10px; border: none;">
+                                    <t t-out="subheader.get('name')"/>
+                                </th>
+                            </t>
+                        </tr>
+                    </t>
+                    
+                    <!-- Final column names row -->
+                    <tr>
+                        <!-- First empty column -->
+                        <th style="padding: 10px; border: none;"/>
+
+                        <t t-foreach="options['columns']" t-as="subheader">
+                            <th style="padding: 10px; border: 1px solid #dee2e6;">
+                                <t t-out="subheader.get('name')"/>
+                            </th>
+                        </t>
+                        <th t-if="options.get('show_horizontal_group_total')" style="padding: 10px; border: 1px solid #dee2e6;">
+                            <t t-out="options['columns'][0].get('name')"/>
+                        </th>
+                        <th t-if="options.get('column_percent_comparison') == 'growth'" style="padding: 10px; border: 1px solid #dee2e6;"/>
+                    </tr>
+                </thead>
+
+                <!-- Body -->
+                <tbody>
+                    <t t-if="lines">
+                        <t t-call="{{custom_templates.get('pdf_export_main_table_body', 'account_reports.pdf_export_main_table_body')}}">
+                            <t t-set="lines" t-value="filter(lambda x: not split_side or split_side == x.get('horizontal_split_side', 'left'), lines)"/>
+                        </t>
+                    </t>
+                </tbody>
+            </table>
+        </xpath>
+    </template>
+</odoo>

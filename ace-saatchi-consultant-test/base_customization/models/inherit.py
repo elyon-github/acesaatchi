@@ -677,19 +677,23 @@ class AccountMove(models.Model):
             record.x_related_so = sale_order
 
     def _apply_alt_currency_conversion(self):
-        """Update all order lines with fx_currency and converted price."""
+        """Update all invoice lines with fx_currency and converted price."""
         for record in self:
+            # Determine which alt currency to use
+            alt_currency = record.x_related_so.x_alt_currency_id if record.x_related_so else None
+            if not alt_currency:
+                alt_currency = record.invoice_line_ids[0].purchase_order_id.x_alt_currency_id if record.invoice_line_ids and record.invoice_line_ids[0].purchase_order_id else None
+            
+            if not alt_currency:
+                continue
 
-            # if not alt_currency or not record.x_related_so:
-            #     continue
-            # raise UserError('eh')
             for line in record.invoice_line_ids:
-                line.fx_currency_id = record.x_related_so.x_alt_currency_id.id or line.purchase_order_id.x_alt_currency_id.id
+                line.fx_currency_id = alt_currency
                 line.fx_price_unit = line.currency_id._convert(
                     line.price_unit,
-                    line.fx_currency_id,
+                    alt_currency,
                     record.company_id or record.env.company,
-                    record.x_related_so.date_order or line.purchase_order_id.create_date
+                    record.x_related_so.date_order if record.x_related_so else (line.purchase_order_id.date_order if line.purchase_order_id else record.date)
                 )
 
     @api.depends('name')
@@ -840,6 +844,75 @@ class AccountMoveLine(models.Model):
         string="Alt Unit Price",
         help="Unit price in foreign exchange currency"
     )
+
+    # Hidden field to track which field was last edited
+    _last_edited_price_field = fields.Char(store=False)
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        """Auto-compute fx_price_unit when creating invoice lines"""
+        lines = super(AccountMoveLine, self).create(vals_list)
+        for line in lines:
+            if line.price_unit and line.fx_currency_id and not line.fx_price_unit:
+                # Use the invoice line's currency_id
+                line_currency = line.currency_id
+                if line_currency and line_currency != line.fx_currency_id:
+                    line.fx_price_unit = line_currency._convert(
+                        line.price_unit,
+                        line.fx_currency_id,
+                        line.move_id.company_id or self.env.company,
+                        line.move_id.date or fields.Date.today()
+                    )
+                elif line_currency == line.fx_currency_id:
+                    line.fx_price_unit = line.price_unit
+        return lines
+
+    @api.onchange('price_unit', 'fx_currency_id')
+    def _onchange_price_unit_to_fx(self):
+        """Convert price_unit (invoice line currency) to fx_price_unit"""
+        # Mark that price_unit was edited
+        self._last_edited_price_field = 'price_unit'
+
+        if self.price_unit and self.fx_currency_id:
+            # Use the invoice line's currency_id
+            line_currency = self.currency_id
+            if line_currency and line_currency != self.fx_currency_id:
+                # Convert from line currency to FX currency
+                self.fx_price_unit = line_currency._convert(
+                    self.price_unit,
+                    self.fx_currency_id,
+                    self.move_id.company_id or self.env.company,
+                    self.move_id.date or fields.Date.today()
+                )
+            elif line_currency == self.fx_currency_id:
+                self.fx_price_unit = self.price_unit
+
+    @api.onchange('fx_price_unit')
+    def _onchange_fx_price_unit_to_price(self):
+        """Convert fx_price_unit to price_unit (invoice line currency)"""
+        # Only convert if fx_price_unit was the last field edited by user
+        # This prevents the chain reaction when price_unit triggers fx_price_unit change
+        if self._last_edited_price_field == 'price_unit':
+            # Reset the flag
+            self._last_edited_price_field = None
+            return
+
+        # Mark that fx_price_unit was edited
+        self._last_edited_price_field = 'fx_price_unit'
+
+        if self.fx_price_unit and self.fx_currency_id:
+            # Use the invoice line's currency_id
+            line_currency = self.currency_id
+            if line_currency and line_currency != self.fx_currency_id:
+                # Convert from FX currency to line currency
+                self.price_unit = self.fx_currency_id._convert(
+                    self.fx_price_unit,
+                    line_currency,
+                    self.move_id.company_id or self.env.company,
+                    self.move_id.date or fields.Date.today()
+                )
+            elif line_currency == self.fx_currency_id:
+                self.price_unit = self.fx_price_unit
 
 
 class PurchaseOrder(models.Model):
