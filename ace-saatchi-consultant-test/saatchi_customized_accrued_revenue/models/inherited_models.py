@@ -605,7 +605,8 @@ class AccountMoveLine(models.Model):
         string="CE Code",
         compute="_compute_ce_fields",
         store=True,
-        help="Contract Estimate code from sale order"
+        help="Contract Estimate code from sale order",
+        readonly=False
     )
 
         
@@ -637,7 +638,8 @@ class AccountMoveLine(models.Model):
         string="CE Date",
         compute="_compute_ce_fields",
         store=True,
-        help="Contract Estimate date from sale order"
+        help="Contract Estimate date from sale order",
+        readonly=False
     )
     
     x_ce_status = fields.Selection(
