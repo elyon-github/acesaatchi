@@ -251,9 +251,11 @@ class InheritSaleOrder(models.Model):
     # ========== Compute Methods ==========
 
     @api.depends(
+        'order_line',
         'order_line.price_subtotal',
         'order_line.qty_invoiced',
         'order_line.price_unit',
+        'order_line.product_template_id',
     )
     def _compute_x_ce_amounts(self):
         """

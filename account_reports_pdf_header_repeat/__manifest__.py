@@ -9,7 +9,6 @@
     'depends': ['account_reports'],
     'data': [
         'data/pdf_export_templates.xml',
-        'data/customer_reports_pdf_export_templates.xml',
     ],
     'installable': True,
     'auto_install': False,

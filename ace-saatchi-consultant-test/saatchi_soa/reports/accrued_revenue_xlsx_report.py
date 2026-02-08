@@ -230,6 +230,35 @@ class AccruedRevenueXLSX(models.AbstractModel):
 
         return grouped
 
+    def _calculate_prev_month_balances(self, accrued_account_ids, accrual_month):
+        """
+        Calculate the ending balance of the previous month for each partner/CE code
+        by querying all posted accrued revenue account lines up to the last day of
+        the previous month. This gives us the cumulative balance to carry forward.
+        Returns: dict keyed by (PARTNER_NAME, CE_CODE) -> balance (debit - credit)
+        """
+        prev_month_end = accrual_month - relativedelta(days=1)  # last day of previous month
+
+        # Query all posted lines on the accrued revenue account up to prev month end
+        prev_lines = self.env['account.move.line'].sudo().search([
+            ('account_id', 'in', accrued_account_ids),
+            ('date', '<=', prev_month_end),
+            ('parent_state', '=', 'posted'),
+        ])
+
+        balances = defaultdict(float)
+        for line in prev_lines:
+            partner_name = (
+                line.partner_id.name.upper()
+                if line.partner_id and line.partner_id.name
+                else 'UNKNOWN'
+            )
+            ce_code = line.x_ce_code.upper() if line.x_ce_code else 'NO_CE'
+            net_amount = (line.debit or 0) - (line.credit or 0)
+            balances[(partner_name, ce_code)] += net_amount
+
+        return balances
+
     def _calculate_amounts_by_type(self, lines, accrual_month):
         """Calculate amounts for each entry type category"""
         amounts = {
@@ -299,6 +328,10 @@ class AccruedRevenueXLSX(models.AbstractModel):
                 "No accrued revenue entries found for the selected date range.")
 
         # Get date range from wizard data
+        if 'start_date' not in data or 'end_date' not in data:
+            raise UserError(
+                "Date range parameters are missing. Please use the Accrued Revenue wizard to generate the report with start and end dates.")
+        
         start_date = datetime.datetime.strptime(
             data['start_date'], '%Y-%m-%d').date()
         end_date = datetime.datetime.strptime(
@@ -314,7 +347,7 @@ class AccruedRevenueXLSX(models.AbstractModel):
         # Generate sheets for each month
         for accrual_month in accrual_months:
             self._generate_month_sheets(
-                workbook, formats, filtered_lines, lines, accrual_month, accrued_account_id)
+                workbook, formats, filtered_lines, lines, accrual_month, accrued_account_ids[0])
 
         return True
 
@@ -336,6 +369,10 @@ class AccruedRevenueXLSX(models.AbstractModel):
 
         # Report date
         report_date = accrual_month.strftime('%m/%d/%Y')
+
+        # Calculate previous month ending balances from the database
+        prev_month_balances = self._calculate_prev_month_balances(
+            [accrued_account_id], accrual_month)
 
         # Group lines by client and CE# for this specific month
         grouped_data = self._group_lines_by_ce(filtered_lines, accrual_month)
@@ -430,7 +467,10 @@ class AccruedRevenueXLSX(models.AbstractModel):
                 else:
                     sheet.write(row, 4, '', formats['centered'])
 
-                sheet.write(row, 5, 0, formats['currency'])
+                # Get previous month ending balance from DB
+                prev_balance = prev_month_balances.get(
+                    (partner_name, ce_code), 0)
+                sheet.write(row, 5, prev_balance, formats['currency'])
                 sheet.write(
                     row, 6, amounts['system_reversal'], formats['currency_negative'])
                 sheet.write(
