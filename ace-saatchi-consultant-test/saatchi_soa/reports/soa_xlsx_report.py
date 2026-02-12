@@ -363,17 +363,23 @@ class SaatchiXLSX(models.AbstractModel):
                     # Get sale order for CE# and Job Description
                     sale_order = move.invoice_line_ids.mapped('sale_line_ids.order_id')[:1] if move.invoice_line_ids else False
 
-                    # Get CE# with fallback to x_studio_old_ce_1
+                    # Get CE# with fallback to old CE
                     ce_code = ''
-                    # if sale_order:
-                    ce_code = sale_order.x_ce_code or move.x_studio_old_ce_1 or ''
+                    ce_code = sale_order.x_studio_old_ce or sale_order.x_ce_code or move.x_studio_old_ce_1 or ''
+                    
+                    # Use old CE date if available, else fallback to invoice date
+                    ce_date = move.invoice_date or move.date
+                    if sale_order and sale_order.x_studio_old_ce_date:
+                        ce_date = sale_order.x_studio_old_ce_date
+                    elif sale_order:
+                        ce_date = sale_order.date_order or ce_date
                     
                     # Write row data
                     sheet.write(row, 0, move.ref or '', formats['normal'])  # PO#
                     sheet.write(row, 1, ce_code, formats['centered'])  # CE#
                     sheet.write(row, 2, sale_order.x_job_description or '' if sale_order else '', formats['centered'])  # Project Title
                     sheet.write(row, 3, move.name or '', formats['centered'])  # Invoice #
-                    sheet.write(row, 4, inv_date, formats['date'])  # Date
+                    sheet.write(row, 4, ce_date, formats['date'])  # Date
                     sheet.write(row, 5, amount, currency_format)  # Total with currency
 
                     # Month columns - only populate the matching bucket

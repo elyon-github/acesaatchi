@@ -317,11 +317,12 @@ class SaleOrder(models.Model):
             # Handle negative amounts (returns/adjustments)
             if accrued_amount < 0:
                 # Negative accrual: Dr. Revenue (reverse the credit)
+                effective_ce = self.x_studio_old_ce or self.x_ce_code
                 self.env['saatchi.accrued_revenue_lines'].create({
                     'accrued_revenue_id': accrued_revenue.id,
                     'ce_line_id': line.id,
                     'account_id': income_account.id,
-                    'label': f'{self.x_ce_code} - {line.name}',
+                    'label': f'{effective_ce} - {line.name}',
                     'debit': abs(accrued_amount),  # Debit the revenue account
                     'credit': 0.0,
                     'currency_id': line.currency_id.id,
@@ -329,11 +330,12 @@ class SaleOrder(models.Model):
                 })
             else:
                 # Positive accrual: Cr. Revenue (normal)
+                effective_ce = self.x_studio_old_ce or self.x_ce_code
                 self.env['saatchi.accrued_revenue_lines'].create({
                     'accrued_revenue_id': accrued_revenue.id,
                     'ce_line_id': line.id,
                     'account_id': income_account.id,
-                    'label': f'{self.x_ce_code} - {line.name}',
+                    'label': f'{effective_ce} - {line.name}',
                     'credit': accrued_amount,
                     'debit': 0.0,
                     'currency_id': line.currency_id.id,
@@ -465,6 +467,7 @@ class SaleOrder(models.Model):
 
     def action_view_accrued_revenues_journal_items(self):
         self.ensure_one()
+        effective_ce = self.x_studio_old_ce or self.x_ce_code
         list_view_id = self.env.ref(
             'saatchi_customized_accrued_revenue.view_accrued_revenue_journal_items_list').id
         search_view_id = self.env.ref(
@@ -476,7 +479,7 @@ class SaleOrder(models.Model):
             'view_mode': 'list,form',
             'views': [(list_view_id, 'list')],
             'search_view_id': search_view_id,  # Add comma here!
-            'domain': [('x_ce_code', '=', self.x_ce_code)],
+            'domain': [('x_ce_code', '=', effective_ce)],
             'context': {'journal_type': 'general', 'search_default_posted': 1},
         }
 
@@ -488,8 +491,9 @@ class SaleOrder(models.Model):
 
     def _compute_related_accrued_revenue_journal_items_count(self):
         for record in self:
+            effective_ce = record.x_studio_old_ce or record.x_ce_code
             record.related_accrued_revenue_journal_items_count = self.env['account.move.line'].search_count([
-                ('x_ce_code', '=', record.x_ce_code), ('x_type_of_entry', '!=', False)
+                ('x_ce_code', '=', effective_ce), ('x_type_of_entry', '!=', False)
             ])
 
 
@@ -697,15 +701,18 @@ class AccountMoveLine(models.Model):
     
     @api.depends('x_sales_order', 
                  'x_sales_order.x_ce_code',
+                 'x_sales_order.x_studio_old_ce',
                  'x_sales_order.date_order', 
                  'x_sales_order.x_ce_status')
     def _compute_ce_fields(self):
-        """Compute CE-related fields from linked sale order"""
+        """Compute CE-related fields from linked sale order. Prioritizes old CE code and date over new."""
         for line in self:
             so = line.x_sales_order
             if so:
-                line.x_ce_code = so.x_ce_code
-                line.x_ce_date = so.date_order
+                line.x_ce_code = so.x_studio_old_ce or so.x_ce_code
+                # Try to use old CE date if it exists (Studio field), fallback to date_order
+                old_ce_date = getattr(so, 'x_studio_old_ce_date', False)
+                line.x_ce_date = old_ce_date or so.date_order
                 line.x_ce_status = so.x_ce_status
                 line.x_client_product_ce_code = so.x_client_product_ce_code.x_product_id.id if so.x_client_product_ce_code and so.x_client_product_ce_code.x_product_id else False
             else:

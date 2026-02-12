@@ -1,5 +1,6 @@
 from odoo import models
 import datetime
+import re
 from xlsxwriter.workbook import Workbook
 from odoo.exceptions import ValidationError, UserError
 from dateutil.relativedelta import relativedelta
@@ -143,6 +144,15 @@ class AccruedRevenueXLSX(models.AbstractModel):
             'border': 1
         })
 
+        # Red text format for OB-only rows (CE# column)
+        centered_red_format = workbook.add_format({
+            **base_font,
+            'align': 'center',
+            'valign': 'vcenter',
+            'border': 1,
+            'font_color': 'red'
+        })
+
         return {
             'title': title_format,
             'section_header': section_header_format,
@@ -152,7 +162,8 @@ class AccruedRevenueXLSX(models.AbstractModel):
             'centered': centered_format,
             'date': date_format,
             'currency': currency_format,
-            'currency_negative': currency_negative_format
+            'currency_negative': currency_negative_format,
+            'centered_red': centered_red_format
         }
 
     def _determine_accrual_months(self, lines, start_date, end_date):
@@ -215,31 +226,229 @@ class AccruedRevenueXLSX(models.AbstractModel):
             grouped[partner_name][ce_code]['lines'].append(line)
 
             # Capture CE-level fields (use first non-empty value found)
-            if line.x_ce_date and not grouped[partner_name][ce_code]['ce_date']:
-                grouped[partner_name][ce_code]['ce_date'] = line.x_ce_date
-                grouped[partner_name][ce_code]['year'] = line.x_ce_date.year
+            if not grouped[partner_name][ce_code]['ce_date']:
+                # Prioritize old CE date from accrued revenue record, fallback to x_ce_date
+                if line.move_id and line.move_id.x_related_custom_accrued_record:
+                    accrued_record = line.move_id.x_related_custom_accrued_record
+                    if accrued_record.old_ce_date:
+                        grouped[partner_name][ce_code]['ce_date'] = accrued_record.old_ce_date
+                    elif line.x_ce_date:
+                        grouped[partner_name][ce_code]['ce_date'] = line.x_ce_date
+                elif line.x_ce_date:
+                    grouped[partner_name][ce_code]['ce_date'] = line.x_ce_date
+            
+            if grouped[partner_name][ce_code]['ce_date']:
+                grouped[partner_name][ce_code]['year'] = grouped[partner_name][ce_code]['ce_date'].year
 
             if line.move_id and line.move_id.x_related_custom_accrued_record and not grouped[partner_name][ce_code]['description']:
                 desc = line.move_id.x_related_custom_accrued_record.ce_job_description or ''
                 grouped[partner_name][ce_code]['description'] = desc.upper()
 
-            if line.x_ce_status and not grouped[partner_name][ce_code]['ce_status']:
-                selection_dict = dict(line._fields['x_ce_status'].selection)
-                ce_status = selection_dict.get(line.x_ce_status, '')
-                grouped[partner_name][ce_code]['ce_status'] = ce_status.upper()
+            if line.move_id and line.move_id.x_related_custom_accrued_record and not grouped[partner_name][ce_code]['ce_status']:
+                accrued_record = line.move_id.x_related_custom_accrued_record
+                if accrued_record.ce_status:
+                    # Get CE Status from the accrued revenue record
+                    selection_dict = dict(accrued_record._fields['ce_status'].selection)
+                    ce_status = selection_dict.get(accrued_record.ce_status, '')
+                    grouped[partner_name][ce_code]['ce_status'] = ce_status.upper()
 
         return grouped
 
+    def _normalize_ce_code(self, ce_code):
+        """
+        Normalize a CE code for consistent matching.
+        Removes all whitespace and converts to uppercase.
+
+        Args:
+            ce_code (str): Raw CE code string
+
+        Returns:
+            str: Normalized CE code (e.g., 'CE 001' -> 'CE001')
+        """
+        if not ce_code:
+            return ''
+        return re.sub(r'\s+', '', ce_code.strip().upper())
+
+    def _get_opening_balance_cutoff_date(self):
+        """
+        Get the opening balance cutoff date from the accrual configuration
+        for the current company.
+
+        Returns:
+            date or False: The cutoff month-end date, or False if not configured
+        """
+        try:
+            config = self.env['saatchi.accrual_config'].sudo().search([
+                ('company_id', '=', self.env.company.id)
+            ], limit=1)
+            if config and config.opening_balance_cutoff_date:
+                return config.opening_balance_cutoff_date
+        except Exception as e:
+            _logger.warning('Could not retrieve opening balance cutoff date: %s', str(e))
+        return False
+
+    def _is_opening_balance_month(self, accrual_month):
+        """
+        Check if the given accrual month is the opening balance month.
+        This is true when the previous month end equals the configured cutoff date.
+        """
+        cutoff_date = self._get_opening_balance_cutoff_date()
+        if not cutoff_date:
+            return False
+        prev_month_end = accrual_month - relativedelta(days=1)
+        return prev_month_end == cutoff_date
+
+    def _find_sale_order_by_ce_code(self, ce_code):
+        """
+        Find a sale.order matching the given CE code.
+        Searches both x_ce_code and x_studio_old_ce (Studio field) on sale.order.
+        Returns the first matching sale.order or empty recordset.
+        """
+        if not ce_code:
+            return self.env['sale.order']
+
+        SaleOrder = self.env['sale.order'].sudo()
+        company_domain = [('company_id', 'in', self.env.companies.ids)]
+
+        # 1. Exact match on x_ce_code
+        so = SaleOrder.search([('x_ce_code', '=', ce_code)] + company_domain, limit=1)
+        if so:
+            return so
+
+        # 2. Exact match on x_studio_old_ce (Studio field)
+        try:
+            so = SaleOrder.search([('x_studio_old_ce', '=', ce_code)] + company_domain, limit=1)
+            if so:
+                return so
+        except Exception:
+            pass
+
+        # 3. Fuzzy match on x_ce_code (whitespace/case variations)
+        so = SaleOrder.search([('x_ce_code', 'ilike', ce_code.strip())] + company_domain, limit=1)
+        if so:
+            return so
+
+        # 4. Fuzzy match on x_studio_old_ce
+        try:
+            so = SaleOrder.search([('x_studio_old_ce', 'ilike', ce_code.strip())] + company_domain, limit=1)
+            if so:
+                return so
+        except Exception:
+            pass
+
+        return SaleOrder
+
+    def _merge_opening_balance_rows(self, grouped_data):
+        """
+        Merge opening-balance-only rows into grouped_data.
+
+        For CE codes that exist in the opening balance model but have NO accrual
+        records (not already in grouped_data), create a row by pulling data from
+        the matching sale.order (for live/current info) or falling back to the
+        opening balance record's descriptive fields.
+
+        These rows will have empty movement columns; only the first balance column
+        (previous month ending balance) will be populated via _calculate_prev_month_balances().
+        """
+        cutoff_date = self._get_opening_balance_cutoff_date()
+        if not cutoff_date:
+            return
+
+        try:
+            ob_records = self.env[
+                'saatchi.accrued_revenue_opening_balance'
+            ].get_opening_balance_records_for_month(
+                balance_date=cutoff_date,
+                company_id=self.env.company.id
+            )
+        except Exception as e:
+            _logger.warning('Error fetching opening balance records for OB rows: %s', str(e))
+            return
+
+        if not ob_records:
+            return
+
+        # Collect normalized CE codes already present in grouped_data
+        existing_normalized_ces = set()
+        for partner_name, ces in grouped_data.items():
+            for ce_code_key in ces.keys():
+                existing_normalized_ces.add(self._normalize_ce_code(ce_code_key))
+
+        # Add OB-only rows for CEs not already present
+        for norm_ce, ob_data in ob_records.items():
+            if norm_ce in existing_normalized_ces:
+                continue
+
+            # Try to find matching sale.order for live data
+            so = self._find_sale_order_by_ce_code(ob_data.get('ce_code_display', ''))
+
+            if so:
+                partner_name = (so.partner_id.name or ob_data.get('partner_name') or 'UNKNOWN').upper()
+                ce_code_display = (
+                    getattr(so, 'x_studio_old_ce', '') or
+                    so.x_ce_code or
+                    ob_data.get('ce_code_display', 'NO_CE')
+                ).upper()
+                old_ce_date = getattr(so, 'x_studio_old_ce_date', False)
+                ce_date = old_ce_date or so.date_order or ob_data.get('ce_date')
+                description = (getattr(so, 'x_job_description', '') or ob_data.get('job_description', '')).upper()
+
+                # Get CE status from SO
+                ce_status = ''
+                if hasattr(so, 'x_ce_status') and so.x_ce_status:
+                    try:
+                        status_selection = dict(so._fields['x_ce_status'].selection)
+                        ce_status = status_selection.get(so.x_ce_status, '').upper()
+                    except Exception:
+                        pass
+                
+                # Fallback to OB record's ce_status if available
+                if not ce_status and ob_data.get('ce_status'):
+                    ce_status = ob_data.get('ce_status', '').upper()
+            else:
+                partner_name = (ob_data.get('partner_name') or 'UNKNOWN').upper()
+                ce_code_display = (ob_data.get('ce_code_display') or 'NO_CE').upper()
+                ce_date = ob_data.get('ce_date')
+                description = (ob_data.get('job_description') or '').upper()
+                # Use ce_status directly from OB record (now a Char field)
+                ce_status = (ob_data.get('ce_status') or '').upper()
+
+            # Add to grouped_data with empty lines (no movement)
+            grouped_data[partner_name][ce_code_display] = {
+                'ce_date': ce_date,
+                'description': description,
+                'year': ce_date.year if ce_date else None,
+                'ce_status': ce_status,
+                'lines': [],  # No move lines - OB-only row
+            }
+
+            _logger.debug(
+                'Added OB-only row for CE# %s (partner: %s)',
+                ce_code_display, partner_name
+            )
+
     def _calculate_prev_month_balances(self, accrued_account_ids, accrual_month):
         """
-        Calculate the ending balance of the previous month for each partner/CE code
-        by querying all posted accrued revenue account lines up to the last day of
-        the previous month. This gives us the cumulative balance to carry forward.
-        Returns: dict keyed by (PARTNER_NAME, CE_CODE) -> balance (debit - credit)
+        Calculate the ending balance of the previous month for each partner/CE code.
+
+        Uses a two-tier approach:
+        1. PRIMARY: Query all posted accrued revenue account lines from the DB
+           up to the last day of the previous month (cumulative balance).
+        2. FALLBACK: For any CE# that has NO DB history, check the Opening Balance
+           model if the previous month end matches the configured cutoff date.
+
+        The DB balance always takes priority over the opening balance.
+
+        Args:
+            accrued_account_ids (list): Account IDs for the accrued revenue account
+            accrual_month (date): First day of the current accrual month
+
+        Returns:
+            dict: {(PARTNER_NAME, CE_CODE): balance} where balance = debit - credit
         """
         prev_month_end = accrual_month - relativedelta(days=1)  # last day of previous month
 
-        # Query all posted lines on the accrued revenue account up to prev month end
+        # ── TIER 1: Database transaction history ──
         prev_lines = self.env['account.move.line'].sudo().search([
             ('account_id', 'in', accrued_account_ids),
             ('date', '<=', prev_month_end),
@@ -247,6 +456,8 @@ class AccruedRevenueXLSX(models.AbstractModel):
         ])
 
         balances = defaultdict(float)
+        db_ce_codes_normalized = set()  # Track which CE codes have DB history
+
         for line in prev_lines:
             partner_name = (
                 line.partner_id.name.upper()
@@ -257,7 +468,119 @@ class AccruedRevenueXLSX(models.AbstractModel):
             net_amount = (line.debit or 0) - (line.credit or 0)
             balances[(partner_name, ce_code)] += net_amount
 
+            # Track normalized CE code so we know it has DB history
+            db_ce_codes_normalized.add(self._normalize_ce_code(ce_code))
+
+        # ── TIER 2: Opening Balance fallback ──
+        # Only apply if the previous month end matches the configured cutoff date
+        cutoff_date = self._get_opening_balance_cutoff_date()
+        if cutoff_date and prev_month_end == cutoff_date:
+            try:
+                opening_records = self.env[
+                    'saatchi.accrued_revenue_opening_balance'
+                ].get_opening_balance_records_for_month(
+                    balance_date=cutoff_date,
+                    company_id=self.env.company.id
+                )
+
+                for norm_ce_code, ob_data in opening_records.items():
+                    # Only use opening balance if this CE# has NO DB history
+                    if norm_ce_code not in db_ce_codes_normalized:
+                        partner_name = (ob_data.get('partner_name') or 'UNKNOWN').upper()
+                        ce_code_display = (ob_data.get('ce_code_display') or 'NO_CE').upper()
+                        balances[(partner_name, ce_code_display)] += ob_data.get('balance', 0)
+
+                        _logger.debug(
+                            'Using opening balance for CE# %s: %.2f',
+                            ce_code_display, ob_data.get('balance', 0)
+                        )
+            except Exception as e:
+                _logger.warning(
+                    'Error fetching opening balances for %s: %s',
+                    prev_month_end, str(e)
+                )
+
         return balances
+
+    def _calculate_reversal_opening_balances(self, accrual_month):
+        """
+        Get reversal opening balances for the opening balance month.
+
+        Uses the same 2-tier approach as _calculate_prev_month_balances:
+        1. PRIMARY: Check for DB transaction history (reversal entries) for the
+           previous month. If a CE# has DB reversal transactions, its computed
+           amounts take priority.
+        2. FALLBACK: For CE# with NO DB reversal history, use the
+           reversal_opening_balance model.
+
+        Only applies when the previous month end matches the configured cutoff date.
+
+        Args:
+            accrual_month (date): First day of the current accrual month
+
+        Returns:
+            dict: {normalized_ce_code: {
+                'system_reversal': float,
+                'manual_reversal': float
+            }}
+            Empty dict if not the opening balance month.
+        """
+        cutoff_date = self._get_opening_balance_cutoff_date()
+        if not cutoff_date:
+            return {}
+
+        prev_month_end = accrual_month - relativedelta(days=1)
+        if prev_month_end != cutoff_date:
+            return {}
+
+        # Identify CE codes that already have DB reversal history for this month
+        # (these will use their computed amounts, not the OB)
+        db_reversal_ce_codes = set()
+        accrued_account_ids = self._get_accrued_revenue_account_id()
+        if accrued_account_ids:
+            accrual_month_end = (accrual_month + relativedelta(months=1)) - relativedelta(days=1)
+            reversal_lines = self.env['account.move.line'].sudo().search([
+                ('account_id', 'in', accrued_account_ids),
+                ('date', '>=', accrual_month),
+                ('date', '<=', accrual_month_end),
+                ('parent_state', '=', 'posted'),
+                ('x_type_of_entry', 'in', ['reversal_system', 'reversal_manual']),
+            ])
+            for line in reversal_lines:
+                if line.x_ce_code:
+                    db_reversal_ce_codes.add(self._normalize_ce_code(line.x_ce_code))
+
+        # Fetch reversal OB records
+        try:
+            reversal_ob = self.env[
+                'saatchi.accrued_revenue_reversal_opening_balance'
+            ].get_reversal_opening_balances_for_month(
+                balance_date=cutoff_date,
+                company_id=self.env.company.id
+            )
+        except Exception as e:
+            _logger.warning(
+                'Error fetching reversal opening balances for %s: %s',
+                cutoff_date, str(e)
+            )
+            return {}
+
+        # Filter out CE codes that have DB history
+        result = {}
+        for norm_ce, ob_data in reversal_ob.items():
+            if norm_ce not in db_reversal_ce_codes:
+                result[norm_ce] = {
+                    'system_reversal': ob_data.get('system_reversal', 0),
+                    'manual_reversal': ob_data.get('manual_reversal', 0),
+                }
+                _logger.debug(
+                    'Using reversal OB for CE# %s: sys=%.2f, manual=%.2f',
+                    ob_data.get('ce_code_display', norm_ce),
+                    ob_data.get('system_reversal', 0),
+                    ob_data.get('manual_reversal', 0)
+                )
+
+        return result
 
     def _calculate_amounts_by_type(self, lines, accrual_month):
         """Calculate amounts for each entry type category"""
@@ -323,10 +646,6 @@ class AccruedRevenueXLSX(models.AbstractModel):
         filtered_lines = lines.filtered(
             lambda l: l.account_id.id in accrued_account_ids)
 
-        if not filtered_lines:
-            raise UserError(
-                "No accrued revenue entries found for the selected date range.")
-
         # Get date range from wizard data
         if 'start_date' not in data or 'end_date' not in data:
             raise UserError(
@@ -343,6 +662,19 @@ class AccruedRevenueXLSX(models.AbstractModel):
         # Determine accrual months based on wizard date range
         accrual_months = self._determine_accrual_months(
             filtered_lines, start_date, end_date)
+
+        # Allow empty filtered_lines if an opening balance month is in range
+        if not filtered_lines:
+            has_ob_month = False
+            cutoff_date = self._get_opening_balance_cutoff_date()
+            if cutoff_date:
+                for m in accrual_months:
+                    if (m - relativedelta(days=1)) == cutoff_date:
+                        has_ob_month = True
+                        break
+            if not has_ob_month:
+                raise UserError(
+                    "No accrued revenue entries found for the selected date range.")
 
         # Generate sheets for each month
         for accrual_month in accrual_months:
@@ -374,10 +706,17 @@ class AccruedRevenueXLSX(models.AbstractModel):
         prev_month_balances = self._calculate_prev_month_balances(
             [accrued_account_id], accrual_month)
 
+        # Calculate reversal opening balances (only populated for OB month)
+        reversal_ob_balances = self._calculate_reversal_opening_balances(accrual_month)
+
         # Group lines by client and CE# for this specific month
         grouped_data = self._group_lines_by_ce(filtered_lines, accrual_month)
 
-        # Skip this month if no data
+        # If this is the opening balance month, merge OB-only rows
+        if self._is_opening_balance_month(accrual_month):
+            self._merge_opening_balance_rows(grouped_data)
+
+        # Skip this month if no data (even after OB merge)
         if not grouped_data:
             return
 
@@ -452,8 +791,13 @@ class AccruedRevenueXLSX(models.AbstractModel):
                 amounts = self._calculate_amounts_by_type(
                     ce_data['lines'], accrual_month)
 
+                # Check if this is an OB-only row (no accrued lines)
+                is_ob_only_row = not ce_data['lines']
+
                 sheet.write(row, 0, partner_name, formats['normal'])
-                sheet.write(row, 1, ce_code, formats['centered'])
+                # Use red text for CE# if row comes from opening balance (no accrued lines)
+                ce_format = formats['centered_red'] if is_ob_only_row else formats['centered']
+                sheet.write(row, 1, ce_code, ce_format)
 
                 if ce_data['ce_date']:
                     sheet.write(row, 2, ce_data['ce_date'], formats['date'])
@@ -467,16 +811,42 @@ class AccruedRevenueXLSX(models.AbstractModel):
                 else:
                     sheet.write(row, 4, '', formats['centered'])
 
-                # Get previous month ending balance from DB
+                # Get previous month ending balance.
+                # First try exact match, then fall back to normalized CE# matching.
                 prev_balance = prev_month_balances.get(
-                    (partner_name, ce_code), 0)
+                    (partner_name, ce_code), None)
+
+                if prev_balance is None:
+                    # Fallback: try normalized CE# matching across all entries
+                    norm_ce = self._normalize_ce_code(ce_code)
+                    for (bal_partner, bal_ce), bal_amount in prev_month_balances.items():
+                        if self._normalize_ce_code(bal_ce) == norm_ce:
+                            prev_balance = bal_amount
+                            break
+
+                prev_balance = prev_balance or 0
                 sheet.write(row, 5, prev_balance, formats['currency'])
+
+                # Check for reversal opening balance overrides (OB month only)
+                norm_ce_for_rev = self._normalize_ce_code(ce_code)
+                rev_ob = reversal_ob_balances.get(norm_ce_for_rev, {})
+
+                # Column G (6): System Reversal
+                system_reversal_val = amounts['system_reversal']
+                if system_reversal_val == 0 and rev_ob.get('system_reversal', 0) != 0:
+                    system_reversal_val = rev_ob['system_reversal']
                 sheet.write(
-                    row, 6, amounts['system_reversal'], formats['currency_negative'])
+                    row, 6, system_reversal_val, formats['currency_negative'])
+
                 sheet.write(
                     row, 7, amounts['system_accrual'], formats['currency_negative'])
+
+                # Column I (8): Manual Reversal
+                manual_reversal_val = amounts['manual_reversal']
+                if manual_reversal_val == 0 and rev_ob.get('manual_reversal', 0) != 0:
+                    manual_reversal_val = rev_ob['manual_reversal']
                 sheet.write(
-                    row, 8, amounts['manual_reversal'], formats['currency_negative'])
+                    row, 8, manual_reversal_val, formats['currency_negative'])
                 sheet.write(
                     row, 9, amounts['manual_reaccrual'], formats['currency_negative'])
                 sheet.write(

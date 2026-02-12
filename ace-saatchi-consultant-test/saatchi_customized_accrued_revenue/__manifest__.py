@@ -26,9 +26,12 @@ Long description of module's purpose
         'security/accrual_config_rules.xml',
         'views/cleanup_old_actions.xml',
         'views/accrual_config_views.xml',
+        'views/opening_balance_views.xml',
+        'views/reversal_opening_balance_views.xml',
         'views/views.xml',
         'views/inherited_views.xml',
         'wizard/accrued_revenue_duplicate_checker_wizard_view.xml',
+        'security/reversal_opening_balance_security.xml',
         'data/data.xml'
     ],
     # only loaded in demonstration mode

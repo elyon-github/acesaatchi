@@ -75,7 +75,18 @@ class SaatchiAccrualConfig(models.Model):
         domain=[('deprecated', '=', False)],
         help='Account 5787 - Digital Income (used for adjustment entries)'
     )
-    
+
+    opening_balance_cutoff_date = fields.Date(
+        string='Opening Balance Cutoff Date',
+        help='Month-end date for which opening balances should be used. '
+             'When generating the accrued revenue report, if the report month '
+             'immediately follows this date (i.e. previous month end = this date), '
+             'the system will look up opening balances from the Opening Balance model '
+             'for any CE# that has no prior DB transaction history.\n\n'
+             'Example: Set to 2025-12-31 so that when generating January 2026, '
+             'the Dec 31 balance column will use imported opening balances.'
+    )
+
     @api.constrains('accrued_journal_id')
     def _check_journal_company(self):
         """Ensure journal belongs to the configured company"""
@@ -175,6 +186,27 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         string='CE Code',
         compute="_compute_ce_code",
         store=True
+    )
+
+    old_ce_code = fields.Char(
+        string='Old CE Code',
+        compute="_compute_old_ce_code",
+        store=True,
+        help="Legacy CE code from Studio field (x_studio_old_ce) on the related sale order"
+    )
+
+    old_ce_date = fields.Date(
+        string='Old CE Date',
+        compute="_compute_old_ce_date",
+        store=True,
+        help="Legacy CE date from Studio field (x_studio_old_ce_date) on the related sale order"
+    )
+
+    effective_ce_code = fields.Char(
+        string='Effective CE Code',
+        compute="_compute_effective_ce_code",
+        store=True,
+        help="Old CE code if available, otherwise the standard CE code. Used for display and matching."
     )
 
     ce_original_total_amount = fields.Monetary(
@@ -312,6 +344,24 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         for record in self:
             record.ce_code = record.x_related_ce_id.x_ce_code if record.x_related_ce_id else False
 
+    @api.depends('x_related_ce_id', 'x_related_ce_id.x_studio_old_ce')
+    def _compute_old_ce_code(self):
+        """Compute old CE code from Studio field on related sale order"""
+        for record in self:
+            record.old_ce_code = record.x_related_ce_id.x_studio_old_ce if record.x_related_ce_id else False
+
+    @api.depends('x_related_ce_id', 'x_related_ce_id.x_studio_old_ce_date')
+    def _compute_old_ce_date(self):
+        """Compute old CE date from Studio field on related sale order"""
+        for record in self:
+            record.old_ce_date = record.x_related_ce_id.x_studio_old_ce_date if record.x_related_ce_id else False
+
+    @api.depends('old_ce_code', 'ce_code')
+    def _compute_effective_ce_code(self):
+        """Compute effective CE code: old CE code takes priority over new CE code"""
+        for record in self:
+            record.effective_ce_code = record.old_ce_code or record.ce_code or False
+
     @api.depends('related_accrued_entry.state', 'related_reverse_accrued_entry.state')
     def _compute_state(self):
         """
@@ -362,7 +412,8 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         for record in self:
             so_name = record.x_related_ce_id.name if record.x_related_ce_id else 'New'
             suffix = ' | [ADJ] ' if record.is_adjustment_entry else ''
-            record.display_name = f'{so_name} | {record.ce_code}{suffix}'
+            ce_display = record.effective_ce_code or record.ce_code or ''
+            record.display_name = f'{so_name} | {ce_display}{suffix}'
 
     @api.depends('line_ids.debit')
     def _compute_total_amount_accrued(self):
@@ -884,11 +935,14 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
             
             line_currency = line.currency_id if line.currency_id else self.currency_id
             
+            # Use old CE code if available, otherwise use CE code
+            effective_ce = self.old_ce_code or self.ce_code
+
             move_line_data = {
                 'name': line.label,
                 'account_id': line.account_id.id,
                 'partner_id': self.ce_partner_id.id if self.ce_partner_id else False,
-                'x_ce_code': self.ce_code,
+                'x_ce_code': effective_ce,
                 'x_ce_date': self.x_related_ce_id.date_order if self.x_related_ce_id else False,
                 'x_remarks': self.remarks,
             }
@@ -929,9 +983,10 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         move_currency_id = self.currency_id.id if self.currency_id else company_currency.id
         
         ref_prefix = 'Adjustment - ' if self.is_adjustment_entry else 'Accrual - '
+        effective_ce = self.old_ce_code or self.ce_code
     
         move_vals = {
-            'ref': f'{ref_prefix}{self.ce_code if self.x_related_ce_id else self.display_name}',
+            'ref': f'{ref_prefix}{effective_ce if self.x_related_ce_id else self.display_name}',
             'journal_id': self.journal_id.id,
             'partner_id': self.ce_partner_id.id if self.ce_partner_id else False,
             'date': self.date,

@@ -11,6 +11,9 @@
         <field name="arch" type="xml">
             <search string="Search Accrued Revenues">
                 <field name="ce_code"/>
+                <field name="old_ce_code"/>
+                <field name="old_ce_date"/>
+                <field name="effective_ce_code"/>
                 <field name="ce_partner_id"/>
                 <field name="ce_status"/>
                 <field name="state"/>
@@ -43,6 +46,9 @@
                 <field name="display_name" string="Name"/>
                 <field name="x_related_ce_id"/>
                 <field name="ce_code"/>
+                <field name="old_ce_code" optional="show"/>
+                <field name="old_ce_date" optional="show"/>
+                <field name="effective_ce_code" optional="hide"/>
                 <field name="ce_partner_id"/>
                 <field name="date"/>
                 <field name="reversal_date"/>
@@ -97,6 +103,9 @@
                             <field name="x_related_ce_id"/>
                             <field name="ce_partner_id"/>
                             <field name="ce_code"/>
+                            <field name="old_ce_code" invisible="not old_ce_code"/>
+                            <field name="old_ce_date" invisible="not old_ce_date"/>
+                            <field name="effective_ce_code"/>
                             <field name="ce_status"/>
                             <field name="ce_job_description"/>
                             <field name="currency_id" invisible="1"/>

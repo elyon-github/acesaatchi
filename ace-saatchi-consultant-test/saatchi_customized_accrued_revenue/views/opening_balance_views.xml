@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <!-- ============================================================ -->
+        <!-- Opening Balance - Form View                                   -->
+        <!-- ============================================================ -->
+        <record id="saatchi_opening_balance_form_view" model="ir.ui.view">
+            <field name="name">Opening Balance Form</field>
+            <field name="model">saatchi.accrued_revenue_opening_balance</field>
+            <field name="arch" type="xml">
+                <form>
+                    <sheet>
+                        <group string="CE Identification">
+                            <group>
+                                <field name="ce_code"/>
+                                <field name="ce_code_normalized" readonly="1"/>
+                                <field name="partner_name"/>
+                            </group>
+                            <group>
+                                <field name="ce_date"/>
+                                <field name="ce_status"/>
+                                <field name="job_description"/>
+                            </group>
+                        </group>
+                        <group string="Balance Information">
+                            <group>
+                                <field name="balance_date"/>
+                                <field name="balance_amount"/>
+                                <field name="currency_id"/>
+                            </group>
+                            <group>
+                                <field name="company_id" groups="base.group_multi_company"/>
+                            </group>
+                        </group>
+                        <group string="Notes">
+                            <field name="notes" nolabel="1" colspan="2"/>
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <!-- ============================================================ -->
+        <!-- Opening Balance - List/Tree View                              -->
+        <!-- ============================================================ -->
+        <record id="saatchi_opening_balance_list_view" model="ir.ui.view">
+            <field name="name">Opening Balance List</field>
+            <field name="model">saatchi.accrued_revenue_opening_balance</field>
+            <field name="arch" type="xml">
+                <list editable="bottom">
+                    <field name="ce_code"/>
+                    <field name="ce_code_normalized" readonly="1" optional="hide"/>
+                    <field name="partner_name"/>
+                    <field name="ce_date" optional="show"/>
+                    <field name="ce_status" optional="show"/>
+                    <field name="job_description" optional="show"/>
+                    <field name="balance_date"/>
+                    <field name="balance_amount" sum="Total Balance"/>
+                    <field name="currency_id" optional="hide"/>
+                    <field name="company_id" groups="base.group_multi_company" optional="show"/>
+                    <field name="notes" optional="hide"/>
+                </list>
+            </field>
+        </record>
+
+        <!-- ============================================================ -->
+        <!-- Opening Balance - Search View                                 -->
+        <!-- ============================================================ -->
+        <record id="saatchi_opening_balance_search_view" model="ir.ui.view">
+            <field name="name">Opening Balance Search</field>
+            <field name="model">saatchi.accrued_revenue_opening_balance</field>
+            <field name="arch" type="xml">
+                <search>
+                    <field name="ce_code" string="CE#"/>
+                    <field name="partner_name" string="Client"/>
+                    <field name="job_description"/>
+                    <filter name="filter_balance_date" string="Balance Date"
+                            date="balance_date"/>
+                    <separator/>
+                    <group expand="0" string="Group By">
+                        <filter name="group_by_date" string="Balance Date"
+                                context="{'group_by': 'balance_date'}"/>
+                        <filter name="group_by_partner" string="Client"
+                                context="{'group_by': 'partner_name'}"/>
+                        <filter name="group_by_status" string="CE Status"
+                                context="{'group_by': 'ce_status'}"/>
+                        <filter name="group_by_company" string="Company"
+                                context="{'group_by': 'company_id'}"
+                                groups="base.group_multi_company"/>
+                    </group>
+                </search>
+            </field>
+        </record>
+
+        <!-- ============================================================ -->
+        <!-- Opening Balance - Window Action                               -->
+        <!-- ============================================================ -->
+        <record id="saatchi_opening_balance_action" model="ir.actions.act_window">
+            <field name="name">Opening Balances</field>
+            <field name="res_model">saatchi.accrued_revenue_opening_balance</field>
+            <field name="view_mode">list,form</field>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">
+                    Import your opening balances here
+                </p>
+                <p>
+                    Opening balances are used to bootstrap the Accrued Revenue report
+                    when no prior transactional history exists. Import historical CE#
+                    balances via CSV/Excel to populate the previous month's balance column.
+                </p>
+            </field>
+        </record>
+
+        <!-- ============================================================ -->
+        <!-- Menu Item: Opening Balances (under Accounting > Configuration)-->
+        <!-- ============================================================ -->
+        <menuitem
+            id="menu_saatchi_opening_balance"
+            name="Accrual Opening Balances"
+            parent="account.menu_finance_configuration"
+            action="saatchi_opening_balance_action"
+            sequence="21"/>
+
+    </data>
+</odoo>

@@ -321,19 +321,26 @@ class AgedReceivablesXLSX(models.AbstractModel):
                     # Get sale order for CE# and other fields
                     sale_order = move.invoice_line_ids.mapped('sale_line_ids.order_id')[:1] if move.invoice_line_ids else False
 
-                    # Get CE# with fallback
+                    # Get CE# with fallback to old CE
                     ce_code = ''
                     if sale_order:
-                        ce_code = sale_order.x_ce_code or move.x_studio_old_ce_1 or ''
+                        ce_code = sale_order.x_studio_old_ce or sale_order.x_ce_code or move.x_studio_old_ce_1 or ''
                     else:
                         ce_code = move.x_studio_old_ce_1 or ''
+                    
+                    # Use old CE date if available, else fallback to invoice/move date
+                    ce_date = inv_date
+                    if sale_order and sale_order.x_studio_old_ce_date:
+                        ce_date = sale_order.x_studio_old_ce_date
+                    elif sale_order:
+                        ce_date = sale_order.date_order or ce_date
 
                     # Write row data
                     sheet.write(row, 0, move.ref or '', formats['normal'])  # PO#
                     sheet.write(row, 1, ce_code, formats['centered'])  # CE#
                     sheet.write(row, 2, partner_name, formats['normal'])  # CLIENT
                     sheet.write(row, 3, move.name or '', formats['centered'])  # INVOICE #
-                    sheet.write(row, 4, inv_date, formats['date'])  # DATE
+                    sheet.write(row, 4, ce_date, formats['date'])  # DATE
                     sheet.write(row, 5, amount, currency_format)  # AMOUNT
 
                     # Aging buckets - only populate the matching bucket
