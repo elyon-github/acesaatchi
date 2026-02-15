@@ -161,6 +161,25 @@ class AgedReceivablesXLSX(models.AbstractModel):
         )
         return converted_amount
 
+    def _get_conversion_date(self, move):
+        """Get the date to use for currency conversion (sales order date)."""
+        # Get sale order
+        sale_order = move.invoice_line_ids.mapped('sale_line_ids.order_id')[:1] if move.invoice_line_ids else False
+        
+        # Priority: x_studio_sales_order.order_date > sale_order.date_order > invoice_date > move.date
+        if sale_order:
+            # Try to get x_studio_sales_order if it exists
+            if hasattr(sale_order, 'x_studio_sales_order') and sale_order.x_studio_sales_order:
+                if hasattr(sale_order.x_studio_sales_order, 'order_date'):
+                    return sale_order.x_studio_sales_order.order_date
+            # Fallback to regular sale order date
+            if sale_order.date_order:
+                return sale_order.date_order.date() if isinstance(sale_order.date_order, datetime.datetime) else sale_order.date_order
+        
+        # Final fallback to invoice date or move date
+        inv_date = move.invoice_date or move.date
+        return inv_date.date() if isinstance(inv_date, datetime.datetime) else inv_date
+
     def _create_currency_format(self, workbook, currency_symbol, base_font):
         """Create currency format with symbol."""
         return workbook.add_format({
@@ -207,24 +226,17 @@ class AgedReceivablesXLSX(models.AbstractModel):
         if not php_currency:
             php_currency = self.env.company.currency_id  # Fallback to company currency
 
-        # Group invoices by partner and currency
+        # Group invoices by partner only (not by currency)
         by_partner = {}
 
         for move in lines:
             if move.move_type in ['out_invoice', 'out_refund'] and move.state == 'posted' and move.amount_residual != 0:
                 partner_name = move.partner_id.name or 'Unknown'
-                currency = move.currency_id
-                currency_key = f"{currency.name}_{currency.id}" if currency else 'NO_CURRENCY'
 
                 if partner_name not in by_partner:
-                    by_partner[partner_name] = {}
-                if currency_key not in by_partner[partner_name]:
-                    by_partner[partner_name][currency_key] = {
-                        'currency': currency,
-                        'moves': []
-                    }
+                    by_partner[partner_name] = []
 
-                by_partner[partner_name][currency_key]['moves'].append(move)
+                by_partner[partner_name].append(move)
 
         # Create single sheet for all partners
         sheet_name = f"AR Aging as of {reference_date.strftime('%B %d, %Y')}"
@@ -263,107 +275,107 @@ class AgedReceivablesXLSX(models.AbstractModel):
         # Sort partners alphabetically
         sorted_partners = sorted(by_partner.items())
 
-        # Initialize grand totals across all clients/currencies (in PHP)
+        # Initialize grand totals across all clients (in PHP)
         grand_totals = {
             'total': 0,
             'buckets': [0, 0, 0, 0, 0]
         }
 
+        # Get PHP symbol for formatting
+        php_symbol = php_currency.symbol if php_currency else '₱'
+        
+        # Create PHP currency formats
+        currency_format = self._create_currency_format(workbook, php_symbol, base_font)
+        subtotal_currency_format = self._create_subtotal_currency_format(workbook, php_symbol, base_font)
+        grand_total_currency_format = self._create_grand_total_currency_format(workbook, php_symbol, base_font)
+
         # Process each partner
-        for partner_name, currencies in sorted_partners:
-            # Process each currency for this partner
-            for currency_key, currency_data in currencies.items():
-                currency = currency_data['currency']
-                moves = currency_data['moves']
+        for partner_name, moves in sorted_partners:
+            # Sort moves by date
+            moves_sorted = sorted(moves, key=lambda x: x.invoice_date or x.date)
 
-                # Get currency symbol
-                currency_symbol = currency.symbol if currency else ''
+            # Initialize subtotals for this partner (in PHP)
+            subtotals = {
+                'total': 0,
+                'buckets': [0, 0, 0, 0, 0]  # 0-30, 31-60, 61-90, 91-120, OVER 120
+            }
 
-                # Create currency-specific formats
-                currency_format = self._create_currency_format(
-                    workbook, currency_symbol, base_font)
-                subtotal_currency_format = self._create_subtotal_currency_format(
-                    workbook, currency_symbol, base_font)
+            # Write data rows for this partner
+            for move in moves_sorted:
+                # Get original amount
+                original_amount = move.amount_residual if move.move_type == 'out_invoice' else -move.amount_residual
+                
+                # Use x_alt_currency_amount if currency differs from company currency, otherwise use original amount
+                if move.currency_id != php_currency:
+                    amount = move.x_alt_currency_amount if hasattr(move, 'x_alt_currency_amount') else original_amount
+                else:
+                    amount = original_amount
+                
+                subtotals['total'] += amount
+                
+                # Use invoice date for display
+                inv_date = move.invoice_date or move.date or reference_date
+                
+                # Use due date for aging calculation
+                due_date = move.invoice_date_due or inv_date
+                
+                # Add to grand total (already in PHP)
+                grand_totals['total'] += amount
 
-                # Sort moves by date
-                moves_sorted = sorted(
-                    moves, key=lambda x: x.invoice_date or x.date)
+                # Determine aging bucket based on DUE date
+                bucket_index = self._get_aging_bucket(due_date, reference_date)
 
-                # Initialize subtotals for this client/currency
-                subtotals = {
-                    'total': 0,
-                    'buckets': [0, 0, 0, 0, 0]  # 0-30, 31-60, 61-90, 91-120, OVER 120
-                }
+                if bucket_index is not None:
+                    subtotals['buckets'][bucket_index] += amount
+                    grand_totals['buckets'][bucket_index] += amount
 
-                # Write data rows for this client/currency
-                for move in moves_sorted:
-                    # Accept both positive and negative amounts
-                    amount = move.amount_residual if move.move_type == 'out_invoice' else -move.amount_residual
-                    subtotals['total'] += amount
-                    
-                    # Use invoice date for currency conversion and display
-                    inv_date = move.invoice_date or move.date or reference_date
-                    
-                    # Use due date for aging calculation
-                    due_date = move.invoice_date_due or inv_date
-                    
-                    # Convert to PHP for grand total
-                    amount_php = self._convert_to_php(amount, currency, php_currency, inv_date)
-                    grand_totals['total'] += amount_php
+                # Get sale order for CE# and other fields
+                sale_order = move.invoice_line_ids.mapped('sale_line_ids.order_id')[:1] if move.invoice_line_ids else False
 
-                    # Determine aging bucket based on DUE date
-                    bucket_index = self._get_aging_bucket(due_date, reference_date)
+                # Get CE# with fallback to old CE
+                ce_code = ''
+                if sale_order:
+                    ce_code = sale_order.x_studio_old_ce or sale_order.x_ce_code or move.x_studio_old_ce_1 or ''
+                else:
+                    ce_code = move.x_studio_old_ce_1 or ''
+                
+                # Use old CE date if available, else fallback to invoice/move date
+                ce_date = inv_date
+                if sale_order and sale_order.x_studio_old_ce_date:
+                    ce_date = sale_order.x_studio_old_ce_date
+                elif sale_order:
+                    ce_date = sale_order.date_order or ce_date
 
-                    if bucket_index is not None:
-                        subtotals['buckets'][bucket_index] += amount
-                        grand_totals['buckets'][bucket_index] += amount_php  # Add PHP converted amount
+                # Write row data (all amounts in PHP)
+                sheet.write(row, 0, move.ref or '', formats['normal'])  # PO#
+                sheet.write(row, 1, ce_code, formats['centered'])  # CE#
+                sheet.write(row, 2, partner_name, formats['normal'])  # CLIENT
+                sheet.write(row, 3, move.name or '', formats['centered'])  # INVOICE #
+                sheet.write(row, 4, ce_date, formats['date'])  # DATE
+                sheet.write(row, 5, amount, currency_format)  # AMOUNT (in PHP)
 
-                    # Get sale order for CE# and other fields
-                    sale_order = move.invoice_line_ids.mapped('sale_line_ids.order_id')[:1] if move.invoice_line_ids else False
-
-                    # Get CE# with fallback
-                    ce_code = ''
-                    if sale_order:
-                        ce_code = sale_order.x_ce_code or move.x_studio_old_ce_1 or ''
-                    else:
-                        ce_code = move.x_studio_old_ce_1 or ''
-
-                    # Write row data
-                    sheet.write(row, 0, move.ref or '', formats['normal'])  # PO#
-                    sheet.write(row, 1, ce_code, formats['centered'])  # CE#
-                    sheet.write(row, 2, partner_name, formats['normal'])  # CLIENT
-                    sheet.write(row, 3, move.name or '', formats['centered'])  # INVOICE #
-                    sheet.write(row, 4, inv_date, formats['date'])  # DATE
-                    sheet.write(row, 5, amount, currency_format)  # AMOUNT
-
-                    # Aging buckets - only populate the matching bucket
-                    for i in range(5):
-                        if i == bucket_index:
-                            sheet.write(row, 6 + i, amount, currency_format)
-                        else:
-                            sheet.write(row, 6 + i, '-', formats['right_aligned'])
-
-                    sheet.set_row(row, 18)
-                    row += 1
-
-                # Write subtotal row for this client/currency with darker green background
-                # Merge cells from column 0 to 4 for the label
-                sheet.merge_range(row, 0, row, 4, f'Total | {partner_name}', formats['subtotal_label'])
-                sheet.write(row, 5, subtotals['total'], subtotal_currency_format)
-
+                # Aging buckets - only populate the matching bucket
                 for i in range(5):
-                    sheet.write(row, 6 + i, subtotals['buckets'][i], subtotal_currency_format)
+                    if i == bucket_index:
+                        sheet.write(row, 6 + i, amount, currency_format)
+                    else:
+                        sheet.write(row, 6 + i, '-', formats['right_aligned'])
 
                 sheet.set_row(row, 18)
                 row += 1
 
-        # GRAND TOTAL ROW - NOW OUTSIDE ALL LOOPS
+            # Write subtotal row for this partner
+            sheet.merge_range(row, 0, row, 4, f'Total | {partner_name}', formats['subtotal_label'])
+            sheet.write(row, 5, subtotals['total'], subtotal_currency_format)
+
+            for i in range(5):
+                sheet.write(row, 6 + i, subtotals['buckets'][i], subtotal_currency_format)
+
+            sheet.set_row(row, 18)
+            row += 1
+
+        # GRAND TOTAL ROW
         # Write GRAND TOTAL row at the bottom (always in PHP)
-        php_symbol = php_currency.symbol if php_currency else '₱'
-        
-        grand_total_currency_format = self._create_grand_total_currency_format(
-            workbook, php_symbol, base_font)
-        
         sheet.write(row, 0, 'Total Aged Receivable', formats['grand_total_label'])
         sheet.write(row, 1, '', formats['grand_total'])
         sheet.write(row, 2, '', formats['grand_total'])
