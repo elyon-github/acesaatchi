@@ -340,18 +340,19 @@ class AgedReceivablesXLSX(models.AbstractModel):
                     ce_code = move.x_studio_old_ce_1 or ''
                 
                 # Use old CE date if available, else fallback to invoice/move date
-                ce_date = inv_date
-                if sale_order and sale_order.x_studio_old_ce_date:
-                    ce_date = sale_order.x_studio_old_ce_date
-                elif sale_order:
-                    ce_date = sale_order.date_order or ce_date
+                # ce_date = inv_date
+                # if sale_order and sale_order.x_studio_old_ce_date:
+                    # ce_date = sale_order.x_studio_old_ce_date
+                # elif sale_order:
+                    # ce_date = sale_order.date_order or ce_date
 
                 # Write row data (all amounts in PHP)
                 sheet.write(row, 0, move.ref or '', formats['normal'])  # PO#
                 sheet.write(row, 1, ce_code, formats['centered'])  # CE#
                 sheet.write(row, 2, partner_name, formats['normal'])  # CLIENT
                 sheet.write(row, 3, move.name or '', formats['centered'])  # INVOICE #
-                sheet.write(row, 4, ce_date, formats['date'])  # DATE
+                # sheet.write(row, 4, ce_date, formats['date'])  # DATE
+                sheet.write(row, 4, inv_date, formats['date'])  # DATE - change to actual invoice date
                 sheet.write(row, 5, amount, currency_format)  # AMOUNT (in PHP)
 
                 # Aging buckets - only populate the matching bucket
