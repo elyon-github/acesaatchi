@@ -16,12 +16,12 @@
                                 <t t-if="report.filter_show_draft and options['all_entries']">[Draft]</t>
                                 <t t-out="report_title"/>
                             </div>
-                            <div class="row o_header_font" style="font-size: 13px; padding: 10px;">
-                                <div class="col-8">
+                            <div class="row o_header_font" style="font-size: 13px; padding: 10px;" >
+                                <div style="width: 75%; word-break: break-word; overflow-wrap: break-word; white-space: normal; line-height: 1.3;">
                                     <!-- All company information (name, address, vat, ...) -->
                                     <t t-call="{{custom_templates.get('company_information', 'account_reports.company_information')}}"/>
                                 </div>
-                                <div class="col-4">
+                                <div style="width: 25%;">
                                     <!-- Software Name, Date Run, Printed By -->
                                     <t t-set="user_tz" t-value="env.user.tz or 'UTC'"/>
                                     <t t-set="tz_offset" t-value="int(datetime.datetime.now(datetime.timezone.utc).astimezone(datetime.timezone(datetime.timedelta(hours=8))).strftime('%z')[:3]) if user_tz == 'Asia/Manila' else 0"/>

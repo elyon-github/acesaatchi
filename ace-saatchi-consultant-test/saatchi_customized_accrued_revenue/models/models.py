@@ -350,7 +350,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         for record in self:
             record.old_ce_code = record.x_related_ce_id.x_studio_old_ce if record.x_related_ce_id else False
 
-    @api.depends('x_related_ce_id', 'x_related_ce_id.x_studio_old_ce_date')
+    # @api.depends('x_related_ce_id', 'x_related_ce_id.x_studio_old_ce_date')
     def _compute_old_ce_date(self):
         """Compute old CE date from Studio field on related sale order"""
         for record in self:
