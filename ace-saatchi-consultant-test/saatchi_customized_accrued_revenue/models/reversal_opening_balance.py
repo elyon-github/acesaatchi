@@ -93,6 +93,17 @@ class SaatchiAccruedRevenueReversalOpeningBalance(models.Model):
              'of the previous month\'s manual accrual.'
     )
 
+    last_month_manual_reversal_adjustment_amount = fields.Float(
+        string='Manual Reversal Adjustment Amount',
+        digits=(16, 2),
+        required=True,
+        default=0.0,
+        help='Additional adjustment amount for the Manual Reversal column (Column I). '
+             'This is combined with Manual Reversal Amount when populating the report. '
+             'Use this for any manual reversal adjustments that need to be added '
+             'on top of the base manual reversal amount.'
+    )
+
     currency_id = fields.Many2one(
         'res.currency',
         string='Currency',
@@ -226,6 +237,7 @@ class SaatchiAccruedRevenueReversalOpeningBalance(models.Model):
             result[rec.ce_code_normalized] = {
                 'system_reversal': rec.last_month_system_reversal_amount,
                 'manual_reversal': rec.last_month_manual_reversal_amount,
+                'manual_reversal_adjustment': rec.last_month_manual_reversal_adjustment_amount,
                 'partner_name': rec.partner_name or '',
                 'ce_date': rec.ce_date,
                 'ce_status': rec.ce_status or '',

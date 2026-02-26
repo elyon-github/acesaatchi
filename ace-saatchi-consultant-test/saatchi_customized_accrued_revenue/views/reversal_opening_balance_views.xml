@@ -28,6 +28,7 @@
                                 <field name="balance_date"/>
                                 <field name="last_month_system_reversal_amount"/>
                                 <field name="last_month_manual_reversal_amount"/>
+                                <field name="last_month_manual_reversal_adjustment_amount"/>
                             </group>
                             <group>
                                 <field name="currency_id"/>
@@ -59,6 +60,7 @@
                     <field name="balance_date"/>
                     <field name="last_month_system_reversal_amount" sum="Total System Reversal"/>
                     <field name="last_month_manual_reversal_amount" sum="Total Manual Reversal"/>
+                    <field name="last_month_manual_reversal_adjustment_amount" sum="Total Manual Reversal Adj"/>
                     <field name="currency_id" optional="hide"/>
                     <field name="company_id" groups="base.group_multi_company" optional="show"/>
                     <field name="notes" optional="hide"/>

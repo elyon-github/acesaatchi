@@ -314,7 +314,8 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
 
     def _execute_default_scenario(self, selected_lines):
         """
-        Default scenario: Create accruals for signed/billable SOs only
+        Default scenario: Create accruals for signed/billable SOs only.
+        Also handles Client Signature SOs that matched reversal OB (marked as manual).
 
         Args:
             selected_lines: Wizard lines to process
@@ -331,18 +332,28 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
         for line in selected_lines:
             so = line.sale_order_id
 
-            # Check CE status
-            if so.state != 'sale' or so.x_ce_status not in ['signed', 'billable']:
+            # Check CE status - allow for_client_signature only if from reversal OB
+            if so.state != 'sale' or so.x_ce_status not in ['signed', 'billable', 'for_client_signature']:
                 skipped_invalid_status.append(
                     f"{so.name} (Status: {dict(so._fields['x_ce_status'].selection).get(so.x_ce_status, 'Unknown')})")
                 continue
+
+            # Client Signature SOs must be from reversal OB
+            if so.x_ce_status == 'for_client_signature' and not line.is_from_reversal_ob:
+                skipped_invalid_status.append(
+                    f"{so.name} (Status: For Client Signature - not in Reversal OB)")
+                continue
+
+            # Client Signature from reversal OB -> mark as manual (not system generated)
+            is_system = not line.is_from_reversal_ob
 
             try:
                 result = so.action_create_custom_accrued_revenue(
                     is_override=False,
                     accrual_date=self.accrual_date,
                     reversal_date=self.reversal_date,
-                    is_adjustment=False
+                    is_adjustment=False,
+                    is_system_generated=is_system
                 )
 
                 if result:
@@ -691,6 +702,15 @@ class SaatchiAccruedRevenueWizardLine(models.TransientModel):
         help="This sale order already has an accrual for this period",
         compute="_compute_existing_accrual_total",
         store=True
+    )
+
+    is_from_reversal_ob = fields.Boolean(
+        string="From Reversal OB",
+        default=False,
+        readonly=True,
+        help="This SO is a Client Signature SO included because its old CE code "
+             "was found in the Accrual Reversal Opening Balances. "
+             "Will be marked as manual (not system generated)."
     )
 
     existing_accrual_ids = fields.Many2many(

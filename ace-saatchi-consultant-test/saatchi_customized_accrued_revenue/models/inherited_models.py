@@ -50,6 +50,14 @@ class SaleOrder(models.Model):
     # ========== Accrual Collection Methods ==========
 
     @api.model
+    def _normalize_ce_code_for_match(self, ce_code):
+        """Normalize CE code: remove whitespace, uppercase."""
+        if not ce_code:
+            return ''
+        import re
+        return re.sub(r'\s+', '', ce_code.strip().upper())
+
+    @api.model
     def collect_potential_accruals(self, accrual_date, reversal_date):
         """
         Collect sale orders eligible for accrual creation
@@ -57,17 +65,22 @@ class SaleOrder(models.Model):
         Criteria:
         - state = 'sale'
         - x_ce_status in ['signed', 'billable']
+        - ALSO: x_ce_status = 'for_client_signature' IF their old CE code
+          matches a CE# in the reversal opening balance model
 
         Args:
             accrual_date: Accrual period start date
             reversal_date: Accrual period end date
 
         Returns:
-            tuple: (potential_sos, duplicate_sos)
+            tuple: (potential_sos, duplicate_sos, client_sig_so_ids)
+                client_sig_so_ids: set of SO IDs that are Client Signature from reversal OB
         """
         potential = self.env['sale.order']
         duplicates = self.env['sale.order']
+        client_sig_so_ids = set()
 
+        # ── Standard: signed/billable SOs ──
         eligible_sos = self.search([
             ('state', '=', 'sale'),
             ('x_ce_status', 'in', ['signed', 'billable']),
@@ -87,7 +100,44 @@ class SaleOrder(models.Model):
             if existing:
                 duplicates |= so
 
-        return potential, duplicates
+        # ── Special: Client Signature SOs with old CE in reversal OB ──
+        client_sig_sos = self.search([
+            ('state', '=', 'sale'),
+            ('x_ce_status', '=', 'for_client_signature'),
+            ('x_ce_code', '!=', False)
+        ])
+
+        if client_sig_sos:
+            # Build normalized set of CE codes from reversal opening balances
+            reversal_ob_records = self.env[
+                'saatchi.accrued_revenue_reversal_opening_balance'
+            ].sudo().search([
+                ('company_id', '=', self.env.company.id)
+            ])
+            reversal_ob_ce_codes = set()
+            for rec in reversal_ob_records:
+                if rec.ce_code:
+                    reversal_ob_ce_codes.add(
+                        self._normalize_ce_code_for_match(rec.ce_code)
+                    )
+
+            for so in client_sig_sos:
+                old_ce = getattr(so, 'x_studio_old_ce', '')
+                if old_ce and self._normalize_ce_code_for_match(old_ce) in reversal_ob_ce_codes:
+                    potential |= so
+                    client_sig_so_ids.add(so.id)
+
+                    existing = self.env['saatchi.accrued_revenue'].search([
+                        ('x_related_ce_id', '=', so.id),
+                        ('date', '>=', accrual_date),
+                        ('date', '<=', reversal_date),
+                        ('state', 'in', ['draft', 'accrued', 'reversed'])
+                    ], limit=1)
+
+                    if existing:
+                        duplicates |= so
+
+        return potential, duplicates, client_sig_so_ids
 
     # ========== Wizard Action Methods ==========
 
@@ -197,7 +247,7 @@ class SaleOrder(models.Model):
 
         # Validate sale order state (skip if override or adjustment)
         if not is_override and not is_adjustment:
-            if self.state != 'sale' or self.x_ce_status not in ['signed', 'billable']:
+            if self.state != 'sale' or self.x_ce_status not in ['signed', 'billable', 'for_client_signature']:
                 _logger.warning(
                     f"SO {self.name} does not meet accrual criteria")
                 return False
@@ -701,7 +751,6 @@ class AccountMoveLine(models.Model):
     
     @api.depends('x_sales_order', 
                  'x_sales_order.x_ce_code',
-                 'x_sales_order.x_studio_old_ce',
                  'x_sales_order.date_order', 
                  'x_sales_order.x_ce_status')
     def _compute_ce_fields(self):

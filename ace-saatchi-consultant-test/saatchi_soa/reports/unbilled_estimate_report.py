@@ -330,6 +330,16 @@ class UnbilledEstimateXLSX(models.AbstractModel):
         # Sort partners alphabetically
         sorted_partners = sorted(partners_dict.keys())
         
+        # Initialize grand totals
+        grand_total = {
+            'approved_billing': 0,
+            'approved_revenue': 0,
+            'invoiced_billing': 0,
+            'invoiced_revenue': 0,
+            'variance_billing': 0,
+            'variance_revenue': 0
+        }
+        
         # Generate data rows
         for partner_name in sorted_partners:
             orders = partners_dict[partner_name]
@@ -441,6 +451,54 @@ class UnbilledEstimateXLSX(models.AbstractModel):
             
             sheet.set_row(current_row, 18)
             current_row += 1
+            
+            # Add partner subtotals to grand totals
+            grand_total['approved_billing'] += subtotal['approved_billing']
+            grand_total['approved_revenue'] += subtotal['approved_revenue']
+            grand_total['invoiced_billing'] += subtotal['invoiced_billing']
+            grand_total['invoiced_revenue'] += subtotal['invoiced_revenue']
+            grand_total['variance_billing'] += subtotal['variance_billing']
+            grand_total['variance_revenue'] += subtotal['variance_revenue']
+        
+        # Write grand total row
+        grand_total_row = current_row
+        sheet.write(grand_total_row, 0, 'GRAND TOTAL', formats['currency_subtotal'])
+        
+        # Write grand total values
+        if grand_total['approved_billing']:
+            sheet.write(grand_total_row, 1, grand_total['approved_billing'], formats['currency_subtotal'])
+        else:
+            sheet.write(grand_total_row, 1, '-', formats['subtotal_dash'])
+            
+        if grand_total['approved_revenue']:
+            sheet.write(grand_total_row, 2, grand_total['approved_revenue'], formats['currency_subtotal'])
+        else:
+            sheet.write(grand_total_row, 2, '-', formats['subtotal_dash'])
+            
+        if grand_total['invoiced_billing']:
+            sheet.write(grand_total_row, 3, grand_total['invoiced_billing'], formats['currency_subtotal'])
+        else:
+            sheet.write(grand_total_row, 3, '-', formats['subtotal_dash'])
+            
+        if grand_total['invoiced_revenue']:
+            sheet.write(grand_total_row, 4, grand_total['invoiced_revenue'], formats['currency_subtotal'])
+        else:
+            sheet.write(grand_total_row, 4, '-', formats['subtotal_dash'])
+            
+        if grand_total['variance_billing']:
+            sheet.write(grand_total_row, 5, grand_total['variance_billing'], formats['currency_subtotal'])
+        else:
+            sheet.write(grand_total_row, 5, '-', formats['subtotal_dash'])
+            
+        if grand_total['variance_revenue']:
+            sheet.write(grand_total_row, 6, grand_total['variance_revenue'], formats['currency_subtotal'])
+        else:
+            sheet.write(grand_total_row, 6, '-', formats['subtotal_dash'])
+        
+        # Empty CE Status and Remarks columns
+        sheet.write(grand_total_row, 7, '', formats['empty'])
+        sheet.write(grand_total_row, 8, '', formats['empty'])
+        sheet.set_row(grand_total_row, 18)
         
         return True
     

@@ -344,17 +344,24 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         for record in self:
             record.ce_code = record.x_related_ce_id.x_ce_code if record.x_related_ce_id else False
 
-    @api.depends('x_related_ce_id', 'x_related_ce_id.x_studio_old_ce')
+    @api.depends('x_related_ce_id')
     def _compute_old_ce_code(self):
         """Compute old CE code from Studio field on related sale order"""
         for record in self:
-            record.old_ce_code = record.x_related_ce_id.x_studio_old_ce if record.x_related_ce_id else False
+            if record.x_related_ce_id:
+                record.old_ce_code = getattr(record.x_related_ce_id, 'x_studio_old_ce', False)
+            else:
+                record.old_ce_code = False
 
     # @api.depends('x_related_ce_id', 'x_related_ce_id.x_studio_old_ce_date')
+    @api.depends('x_related_ce_id')
     def _compute_old_ce_date(self):
         """Compute old CE date from Studio field on related sale order"""
         for record in self:
-            record.old_ce_date = record.x_related_ce_id.x_studio_old_ce_date if record.x_related_ce_id else False
+            if record.x_related_ce_id:
+                record.old_ce_date = getattr(record.x_related_ce_id, 'x_studio_old_ce_date', False)
+            else:
+                record.old_ce_date = False
 
     @api.depends('old_ce_code', 'ce_code')
     def _compute_effective_ce_code(self):
@@ -785,7 +792,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         accrual_date = self._default_accrual_date()
         reversal_date = self._default_reversal_date()
         
-        potential_sos, duplicate_sos = self.env['sale.order'].collect_potential_accruals(
+        potential_sos, duplicate_sos, client_sig_so_ids = self.env['sale.order'].collect_potential_accruals(
             accrual_date=accrual_date,
             reversal_date=reversal_date
         )
@@ -812,12 +819,14 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
             
             if amount_total:
                 has_duplicate = so in duplicate_sos
+                is_client_sig = so.id in client_sig_so_ids
                 self.env['saatchi.accrued_revenue.wizard.line'].create({
                     'wizard_id': wizard.id,
                     'sale_order_id': so.id,
                     'has_existing_accrual': has_duplicate,
                     'amount_total': amount_total,
                     'create_accrual': not has_duplicate,
+                    'is_from_reversal_ob': is_client_sig,
                 })
         
         wizard_name = _('Generate Accrued Revenues - Duplicates Found') if duplicate_sos else _('Generate Accrued Revenues')
@@ -978,7 +987,37 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
             if hasattr(line, 'analytic_distribution') and line.analytic_distribution:
                 move_line_data['analytic_distribution'] = line.analytic_distribution
             
-            move_line_vals.append(move_line_data)
+            move_line_vals.append((move_line_data, line.label))
+
+        # ── Fix currency conversion rounding discrepancy ──
+        # When multiple lines are individually converted from foreign currency,
+        # the sum of rounded converted amounts may differ by a few cents.
+        # Adjust the "Total Accrued" balancing line to absorb the difference.
+        total_debit = sum(vals['debit'] for vals, _ in move_line_vals)
+        total_credit = sum(vals['credit'] for vals, _ in move_line_vals)
+        rounding_diff = company_currency.round(total_debit - total_credit)
+
+        if rounding_diff != 0:
+            # Find the "Total Accrued" line (the balancing entry)
+            total_accrued_idx = None
+            for idx, (vals, label) in enumerate(move_line_vals):
+                if label == 'Total Accrued':
+                    total_accrued_idx = idx
+                    break
+
+            if total_accrued_idx is not None:
+                ta_vals = move_line_vals[total_accrued_idx][0]
+                if rounding_diff > 0:
+                    # More debit than credit → increase credit on Total Accrued
+                    ta_vals['credit'] = company_currency.round(
+                        ta_vals['credit'] + rounding_diff)
+                else:
+                    # More credit than debit → increase debit on Total Accrued
+                    ta_vals['debit'] = company_currency.round(
+                        ta_vals['debit'] + abs(rounding_diff))
+
+        # Strip the label helper, keep only the vals dicts
+        move_line_vals = [vals for vals, _ in move_line_vals]
 
         move_currency_id = self.currency_id.id if self.currency_id else company_currency.id
         

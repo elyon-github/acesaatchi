@@ -153,6 +153,15 @@ class AccruedRevenueXLSX(models.AbstractModel):
             'font_color': 'red'
         })
 
+        # Blue text format for new CE#s (not in reversal opening balances)
+        centered_blue_format = workbook.add_format({
+            **base_font,
+            'align': 'center',
+            'valign': 'vcenter',
+            'border': 1,
+            'font_color': 'blue'
+        })
+
         return {
             'title': title_format,
             'section_header': section_header_format,
@@ -163,7 +172,8 @@ class AccruedRevenueXLSX(models.AbstractModel):
             'date': date_format,
             'currency': currency_format,
             'currency_negative': currency_negative_format,
-            'centered_red': centered_red_format
+            'centered_red': centered_red_format,
+            'centered_blue': centered_blue_format
         }
 
     def _determine_accrual_months(self, lines, start_date, end_date):
@@ -269,6 +279,26 @@ class AccruedRevenueXLSX(models.AbstractModel):
             return ''
         return re.sub(r'\s+', '', ce_code.strip().upper())
 
+    def _normalize_ce_status(self, status):
+        """
+        Normalize CE Status values for consistent display.
+
+        Mapping:
+            BILLABLE (APPROVED) -> BILLABLE
+            #NA / FOR ENCODING -> CLIENT SIGNATURE
+            SIGNED (RELEASED)  -> SIGNED
+        """
+        if not status:
+            return ''
+        s = status.strip().upper()
+        if s in ('BILLABLE (APPROVED)',):
+            return 'BILLABLE'
+        if s in ('#NA', 'FOR ENCODING'):
+            return 'FOR CLIENT SIGNATURE'
+        if s in ('SIGNED (RELEASED)',):
+            return 'SIGNED'
+        return s
+
     def _get_opening_balance_cutoff_date(self):
         """
         Get the opening balance cutoff date from the accrual configuration
@@ -335,6 +365,17 @@ class AccruedRevenueXLSX(models.AbstractModel):
                 return so
         except Exception:
             pass
+
+        # 5. Normalized match (remove all spaces and compare)
+        # Handles cases like XRN00004 vs XRN 00004
+        norm_ce = self._normalize_ce_code(ce_code)
+        all_sos = SaleOrder.search(company_domain)
+        for so in all_sos:
+            if so.x_ce_code and self._normalize_ce_code(so.x_ce_code) == norm_ce:
+                return so
+            old_ce = getattr(so, 'x_studio_old_ce', '')
+            if old_ce and self._normalize_ce_code(old_ce) == norm_ce:
+                return so
 
         return SaleOrder
 
@@ -424,6 +465,97 @@ class AccruedRevenueXLSX(models.AbstractModel):
 
             _logger.debug(
                 'Added OB-only row for CE# %s (partner: %s)',
+                ce_code_display, partner_name
+            )
+
+    def _merge_reversal_opening_balance_rows(self, grouped_data):
+        """
+        Merge reversal-opening-balance-only rows into grouped_data.
+
+        For CE codes that exist in the reversal opening balance model but have NO
+        accrual records (not already in grouped_data), create a row by pulling data
+        from the matching sale.order (for live/current info) or falling back to the
+        reversal opening balance record's descriptive fields.
+
+        These rows will have empty movement columns; only balance columns
+        (F from first OB, G & I from reversal OB) will be populated.
+
+        This method is called BEFORE _merge_opening_balance_rows() so that
+        reversal OB rows take priority over first OB rows.
+        """
+        cutoff_date = self._get_opening_balance_cutoff_date()
+        if not cutoff_date:
+            return
+
+        try:
+            reversal_ob_records = self.env[
+                'saatchi.accrued_revenue_reversal_opening_balance'
+            ].get_reversal_opening_balances_for_month(
+                balance_date=cutoff_date,
+                company_id=self.env.company.id
+            )
+        except Exception as e:
+            _logger.warning('Error fetching reversal OB records for row merge: %s', str(e))
+            return
+
+        if not reversal_ob_records:
+            return
+
+        # Collect normalized CE codes already present in grouped_data
+        existing_normalized_ces = set()
+        for partner_name, ces in grouped_data.items():
+            for ce_code_key in ces.keys():
+                existing_normalized_ces.add(self._normalize_ce_code(ce_code_key))
+
+        # Add reversal-OB-only rows for CEs not already present
+        for norm_ce, rob_data in reversal_ob_records.items():
+            if norm_ce in existing_normalized_ces:
+                continue
+
+            # Try to find matching sale.order for live data
+            so = self._find_sale_order_by_ce_code(rob_data.get('ce_code_display', ''))
+
+            if so:
+                partner_name = (so.partner_id.name or rob_data.get('partner_name') or 'UNKNOWN').upper()
+                ce_code_display = (
+                    getattr(so, 'x_studio_old_ce', '') or
+                    so.x_ce_code or
+                    rob_data.get('ce_code_display', 'NO_CE')
+                ).upper()
+                old_ce_date = getattr(so, 'x_studio_old_ce_date', False)
+                ce_date = old_ce_date or so.date_order or rob_data.get('ce_date')
+                description = (getattr(so, 'x_job_description', '') or rob_data.get('job_description', '')).upper()
+
+                # Get CE status from SO
+                ce_status = ''
+                if hasattr(so, 'x_ce_status') and so.x_ce_status:
+                    try:
+                        status_selection = dict(so._fields['x_ce_status'].selection)
+                        ce_status = status_selection.get(so.x_ce_status, '').upper()
+                    except Exception:
+                        pass
+
+                # Fallback to reversal OB record's ce_status if available
+                if not ce_status and rob_data.get('ce_status'):
+                    ce_status = rob_data.get('ce_status', '').upper()
+            else:
+                partner_name = (rob_data.get('partner_name') or 'UNKNOWN').upper()
+                ce_code_display = (rob_data.get('ce_code_display') or 'NO_CE').upper()
+                ce_date = rob_data.get('ce_date')
+                description = (rob_data.get('job_description') or '').upper()
+                ce_status = (rob_data.get('ce_status') or '').upper()
+
+            # Add to grouped_data with empty lines (no movement)
+            grouped_data[partner_name][ce_code_display] = {
+                'ce_date': ce_date,
+                'description': description,
+                'year': ce_date.year if ce_date else None,
+                'ce_status': ce_status,
+                'lines': [],  # No move lines - reversal OB-only row
+            }
+
+            _logger.debug(
+                'Added reversal-OB-only row for CE# %s (partner: %s)',
                 ce_code_display, partner_name
             )
 
@@ -572,6 +704,7 @@ class AccruedRevenueXLSX(models.AbstractModel):
                 result[norm_ce] = {
                     'system_reversal': ob_data.get('system_reversal', 0),
                     'manual_reversal': ob_data.get('manual_reversal', 0),
+                    'manual_reversal_adjustment': ob_data.get('manual_reversal_adjustment', 0),
                 }
                 _logger.debug(
                     'Using reversal OB for CE# %s: sys=%.2f, manual=%.2f',
@@ -713,7 +846,9 @@ class AccruedRevenueXLSX(models.AbstractModel):
         grouped_data = self._group_lines_by_ce(filtered_lines, accrual_month)
 
         # If this is the opening balance month, merge OB-only rows
+        # Reversal OB rows are merged FIRST (higher priority), then first OB rows
         if self._is_opening_balance_month(accrual_month):
+            self._merge_reversal_opening_balance_rows(grouped_data)
             self._merge_opening_balance_rows(grouped_data)
 
         # Skip this month if no data (even after OB merge)
@@ -793,10 +928,28 @@ class AccruedRevenueXLSX(models.AbstractModel):
 
                 # Check if this is an OB-only row (no accrued lines)
                 is_ob_only_row = not ce_data['lines']
+                
+                # If OB-only, verify it also doesn't exist in sale.order
+                if is_ob_only_row:
+                    # Use the existing method that checks x_ce_code and x_studio_old_ce
+                    so_match = self._find_sale_order_by_ce_code(ce_code)
+                    # Only mark red if CE doesn't exist in any sale order
+                    is_ob_only_row = not so_match
 
                 sheet.write(row, 0, partner_name, formats['normal'])
-                # Use red text for CE# if row comes from opening balance (no accrued lines)
-                ce_format = formats['centered_red'] if is_ob_only_row else formats['centered']
+                
+                # Determine CE# format based on OB and reversal OB presence
+                ce_format = formats['centered']
+                if is_ob_only_row:
+                    # Red: OB-only row (no accrued entries)
+                    ce_format = formats['centered_red']
+                else:
+                    # Check if this CE# is in the reversal opening balances
+                    norm_ce_check = self._normalize_ce_code(ce_code)
+                    if norm_ce_check not in reversal_ob_balances:
+                        # Blue: Has accrued entries but NOT in reversal OB (new CE#)
+                        ce_format = formats['centered_blue']
+                
                 sheet.write(row, 1, ce_code, ce_format)
 
                 if ce_data['ce_date']:
@@ -841,10 +994,12 @@ class AccruedRevenueXLSX(models.AbstractModel):
                 sheet.write(
                     row, 7, amounts['system_accrual'], formats['currency_negative'])
 
-                # Column I (8): Manual Reversal
+                # Column I (8): Manual Reversal (includes adjustment from reversal OB)
                 manual_reversal_val = amounts['manual_reversal']
                 if manual_reversal_val == 0 and rev_ob.get('manual_reversal', 0) != 0:
                     manual_reversal_val = rev_ob['manual_reversal']
+                # Subtract manual reversal adjustment from reversal OB (combined into col I)
+                manual_reversal_val -= rev_ob.get('manual_reversal_adjustment', 0)
                 sheet.write(
                     row, 8, manual_reversal_val, formats['currency_negative'])
                 sheet.write(
@@ -856,7 +1011,7 @@ class AccruedRevenueXLSX(models.AbstractModel):
                 sheet.write_formula(
                     row, 11, f'=F{excel_row}+G{excel_row}+H{excel_row}+I{excel_row}+J{excel_row}+K{excel_row}', formats['currency'])
 
-                sheet.write(row, 12, ce_data['ce_status'], formats['centered'])
+                sheet.write(row, 12, self._normalize_ce_status(ce_data['ce_status']), formats['centered'])
 
                 row += 1
 
@@ -1115,15 +1270,14 @@ class AccruedRevenueXLSX(models.AbstractModel):
         sheet.set_column(6, 6, 12)   # CE Date
         sheet.set_column(7, 7, 35)   # Label
         sheet.set_column(8, 8, 20)   # Reference
-        sheet.set_column(9, 9, 15)   # C.E. Status
-        sheet.set_column(10, 10, 15)  # Debit
-        sheet.set_column(11, 11, 15)  # Credit
-        sheet.set_column(12, 12, 15)  # DR Less CR
-        sheet.set_column(13, 13, 30)  # Remarks
+        sheet.set_column(9, 9, 15)  # Debit
+        sheet.set_column(10, 10, 15)  # Credit
+        sheet.set_column(11, 11, 15)  # DR Less CR
+        sheet.set_column(12, 12, 30)  # Remarks
 
         row = 0
         headers = ['Date', 'Entry Type', 'Journal Entry', 'Account', 'Client Name', 'CE Code',
-                   'CE Date', 'Label', 'Reference', 'C.E. Status', 'Debit', 'Credit', 'DR Less CR', 'Remarks']
+                   'CE Date', 'Label', 'Reference', 'Debit', 'Credit', 'DR Less CR', 'Remarks']
 
         for col, header in enumerate(headers):
             sheet.write(row, col, header, formats['column_header'])
@@ -1131,6 +1285,36 @@ class AccruedRevenueXLSX(models.AbstractModel):
         sheet.autofilter(row, 0, row, len(headers) - 1)
         row += 1
         data_start_row = row
+
+        # Get accrued account for opening balance row
+        accrued_account = self.env['account.account'].browse(accrued_account_id)
+        
+        # Calculate opening balance (previous month's ending balance)
+        prev_month_end = accrual_month - relativedelta(days=1)
+        prev_balance_lines = lines.filtered(lambda l:
+                                           l.account_id.id == accrued_account_id and
+                                           l.date and
+                                           l.date <= prev_month_end and
+                                           l.parent_state == 'posted'
+                                           )
+        
+        opening_balance = sum(prev_balance_lines.mapped(lambda l: l.debit - l.credit))
+
+        # Write opening balance row
+        sheet.write(row, 0, accrual_month, formats['date'])  # Date: first day of month
+        sheet.write(row, 1, 'Opening Balance', formats['normal'])  # Entry Type
+        sheet.write(row, 2, '', formats['normal'])  # Journal Entry (blank)
+        sheet.write(row, 3, accrued_account.display_name if accrued_account else '', formats['normal'])  # Account
+        sheet.write(row, 4, '', formats['normal'])  # Client Name (blank)
+        sheet.write(row, 5, '', formats['centered'])  # CE Code (blank)
+        sheet.write(row, 6, '', formats['centered'])  # CE Date (blank)
+        sheet.write(row, 7, 'Opening Balance', formats['normal'])  # Label
+        sheet.write(row, 8, '', formats['normal'])  # Reference (blank)
+        sheet.write(row, 9, 0, formats['currency'])  # Debit (0)
+        sheet.write(row, 10, 0, formats['currency'])  # Credit (0)
+        sheet.write(row, 11, opening_balance, formats['currency'])  # DR Less CR (opening balance)
+        sheet.write(row, 12, '', formats['normal'])  # Remarks (blank)
+        row += 1
 
         # Sort lines by date and partner name
         sorted_lines = gl_lines.sorted(key=lambda l: (
@@ -1185,24 +1369,19 @@ class AccruedRevenueXLSX(models.AbstractModel):
             # Reference
             sheet.write(row, 8, line.x_reference or '', formats['normal'])
 
-            # CE Status
-            selection_dict = dict(line._fields['x_ce_status'].selection)
-            ce_status = selection_dict.get(line.x_ce_status, '')
-            sheet.write(row, 9, ce_status, formats['centered'])
-
             # Debit
-            sheet.write(row, 10, line.debit or 0, formats['currency'])
+            sheet.write(row, 9, line.debit or 0, formats['currency'])
 
             # Credit
-            sheet.write(row, 11, line.credit or 0, formats['currency'])
+            sheet.write(row, 10, line.credit or 0, formats['currency'])
 
             # DR Less CR (formula)
             excel_row = row + 1
             sheet.write_formula(
-                row, 12, f'=K{excel_row}-L{excel_row}', formats['currency_negative'])
+                row, 11, f'=J{excel_row}-K{excel_row}', formats['currency_negative'])
 
             # Remarks
-            sheet.write(row, 13, line.x_studio_remarks or '',
+            sheet.write(row, 12, line.x_studio_remarks or '',
                         formats['normal'])
 
             row += 1
@@ -1211,7 +1390,7 @@ class AccruedRevenueXLSX(models.AbstractModel):
         total_row = row
 
         # Empty cells before TOTAL label
-        for col in range(0, 9):
+        for col in range(0, 8):
             sheet.write(total_row, col, '',
                         formats['section_header_no_border'])
 
@@ -1224,15 +1403,15 @@ class AccruedRevenueXLSX(models.AbstractModel):
             'valign': 'vcenter',
             'border': 1
         })
-        sheet.write(total_row, 9, 'TOTAL', bold_with_border)
+        sheet.write(total_row, 8, 'TOTAL', bold_with_border)
 
         # Sum formulas for monetary columns
         sheet.write_formula(
+            total_row, 9, f'=SUM(J{data_start_row + 1}:J{total_row})', currency_bold_format)
+        sheet.write_formula(
             total_row, 10, f'=SUM(K{data_start_row + 1}:K{total_row})', currency_bold_format)
         sheet.write_formula(
-            total_row, 11, f'=SUM(L{data_start_row + 1}:L{total_row})', currency_bold_format)
-        sheet.write_formula(
-            total_row, 12, f'=SUM(M{data_start_row + 1}:M{total_row})', currency_negative_bold_format)
-        sheet.write(total_row, 13, '', formats['section_header_no_border'])
+            total_row, 11, f'=SUM(L{data_start_row + 1}:L{total_row})', currency_negative_bold_format)
+        sheet.write(total_row, 12, '', formats['section_header_no_border'])
 
         return True
