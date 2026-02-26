@@ -6,6 +6,7 @@
     'summary': 'Makes PDF report headers repeat on every page',
     'description': 'This module ensures that the company header and column headers repeat on every page in PDF exports of accounting reports.',
     'author': 'Custom',
+    'license': 'LGPL-3',
     'depends': ['account_reports'],
     'data': [
         'data/pdf_export_templates.xml',

@@ -75,7 +75,18 @@ class SaatchiAccrualConfig(models.Model):
         domain=[('deprecated', '=', False)],
         help='Account 5787 - Digital Income (used for adjustment entries)'
     )
-    
+
+    opening_balance_cutoff_date = fields.Date(
+        string='Opening Balance Cutoff Date',
+        help='Month-end date for which opening balances should be used. '
+             'When generating the accrued revenue report, if the report month '
+             'immediately follows this date (i.e. previous month end = this date), '
+             'the system will look up opening balances from the Opening Balance model '
+             'for any CE# that has no prior DB transaction history.\n\n'
+             'Example: Set to 2025-12-31 so that when generating January 2026, '
+             'the Dec 31 balance column will use imported opening balances.'
+    )
+
     @api.constrains('accrued_journal_id')
     def _check_journal_company(self):
         """Ensure journal belongs to the configured company"""
@@ -175,6 +186,27 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         string='CE Code',
         compute="_compute_ce_code",
         store=True
+    )
+
+    old_ce_code = fields.Char(
+        string='Old CE Code',
+        compute="_compute_old_ce_code",
+        store=True,
+        help="Legacy CE code from Studio field (x_studio_old_ce) on the related sale order"
+    )
+
+    old_ce_date = fields.Date(
+        string='Old CE Date',
+        compute="_compute_old_ce_date",
+        store=True,
+        help="Legacy CE date from Studio field (x_studio_old_ce_date) on the related sale order"
+    )
+
+    effective_ce_code = fields.Char(
+        string='Effective CE Code',
+        compute="_compute_effective_ce_code",
+        store=True,
+        help="Old CE code if available, otherwise the standard CE code. Used for display and matching."
     )
 
     ce_original_total_amount = fields.Monetary(
@@ -312,6 +344,31 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         for record in self:
             record.ce_code = record.x_related_ce_id.x_ce_code if record.x_related_ce_id else False
 
+    @api.depends('x_related_ce_id')
+    def _compute_old_ce_code(self):
+        """Compute old CE code from Studio field on related sale order"""
+        for record in self:
+            if record.x_related_ce_id:
+                record.old_ce_code = getattr(record.x_related_ce_id, 'x_studio_old_ce', False)
+            else:
+                record.old_ce_code = False
+
+    # @api.depends('x_related_ce_id', 'x_related_ce_id.x_studio_old_ce_date')
+    @api.depends('x_related_ce_id')
+    def _compute_old_ce_date(self):
+        """Compute old CE date from Studio field on related sale order"""
+        for record in self:
+            if record.x_related_ce_id:
+                record.old_ce_date = getattr(record.x_related_ce_id, 'x_studio_old_ce_date', False)
+            else:
+                record.old_ce_date = False
+
+    @api.depends('old_ce_code', 'ce_code')
+    def _compute_effective_ce_code(self):
+        """Compute effective CE code: old CE code takes priority over new CE code"""
+        for record in self:
+            record.effective_ce_code = record.old_ce_code or record.ce_code or False
+
     @api.depends('related_accrued_entry.state', 'related_reverse_accrued_entry.state')
     def _compute_state(self):
         """
@@ -362,7 +419,8 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         for record in self:
             so_name = record.x_related_ce_id.name if record.x_related_ce_id else 'New'
             suffix = ' | [ADJ] ' if record.is_adjustment_entry else ''
-            record.display_name = f'{so_name} | {record.ce_code}{suffix}'
+            ce_display = record.effective_ce_code or record.ce_code or ''
+            record.display_name = f'{so_name} | {ce_display}{suffix}'
 
     @api.depends('line_ids.debit')
     def _compute_total_amount_accrued(self):
@@ -734,7 +792,7 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
         accrual_date = self._default_accrual_date()
         reversal_date = self._default_reversal_date()
         
-        potential_sos, duplicate_sos = self.env['sale.order'].collect_potential_accruals(
+        potential_sos, duplicate_sos, client_sig_so_ids = self.env['sale.order'].collect_potential_accruals(
             accrual_date=accrual_date,
             reversal_date=reversal_date
         )
@@ -761,12 +819,14 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
             
             if amount_total:
                 has_duplicate = so in duplicate_sos
+                is_client_sig = so.id in client_sig_so_ids
                 self.env['saatchi.accrued_revenue.wizard.line'].create({
                     'wizard_id': wizard.id,
                     'sale_order_id': so.id,
                     'has_existing_accrual': has_duplicate,
                     'amount_total': amount_total,
                     'create_accrual': not has_duplicate,
+                    'is_from_reversal_ob': is_client_sig,
                 })
         
         wizard_name = _('Generate Accrued Revenues - Duplicates Found') if duplicate_sos else _('Generate Accrued Revenues')
@@ -884,11 +944,14 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
             
             line_currency = line.currency_id if line.currency_id else self.currency_id
             
+            # Use old CE code if available, otherwise use CE code
+            effective_ce = self.old_ce_code or self.ce_code
+
             move_line_data = {
                 'name': line.label,
                 'account_id': line.account_id.id,
                 'partner_id': self.ce_partner_id.id if self.ce_partner_id else False,
-                'x_ce_code': self.ce_code,
+                'x_ce_code': effective_ce,
                 'x_ce_date': self.x_related_ce_id.date_order if self.x_related_ce_id else False,
                 'x_remarks': self.remarks,
             }
@@ -924,14 +987,45 @@ class SaatchiCustomizedAccruedRevenue(models.Model):
             if hasattr(line, 'analytic_distribution') and line.analytic_distribution:
                 move_line_data['analytic_distribution'] = line.analytic_distribution
             
-            move_line_vals.append(move_line_data)
+            move_line_vals.append((move_line_data, line.label))
+
+        # ── Fix currency conversion rounding discrepancy ──
+        # When multiple lines are individually converted from foreign currency,
+        # the sum of rounded converted amounts may differ by a few cents.
+        # Adjust the "Total Accrued" balancing line to absorb the difference.
+        total_debit = sum(vals['debit'] for vals, _ in move_line_vals)
+        total_credit = sum(vals['credit'] for vals, _ in move_line_vals)
+        rounding_diff = company_currency.round(total_debit - total_credit)
+
+        if rounding_diff != 0:
+            # Find the "Total Accrued" line (the balancing entry)
+            total_accrued_idx = None
+            for idx, (vals, label) in enumerate(move_line_vals):
+                if label == 'Total Accrued':
+                    total_accrued_idx = idx
+                    break
+
+            if total_accrued_idx is not None:
+                ta_vals = move_line_vals[total_accrued_idx][0]
+                if rounding_diff > 0:
+                    # More debit than credit → increase credit on Total Accrued
+                    ta_vals['credit'] = company_currency.round(
+                        ta_vals['credit'] + rounding_diff)
+                else:
+                    # More credit than debit → increase debit on Total Accrued
+                    ta_vals['debit'] = company_currency.round(
+                        ta_vals['debit'] + abs(rounding_diff))
+
+        # Strip the label helper, keep only the vals dicts
+        move_line_vals = [vals for vals, _ in move_line_vals]
 
         move_currency_id = self.currency_id.id if self.currency_id else company_currency.id
         
         ref_prefix = 'Adjustment - ' if self.is_adjustment_entry else 'Accrual - '
+        effective_ce = self.old_ce_code or self.ce_code
     
         move_vals = {
-            'ref': f'{ref_prefix}{self.ce_code if self.x_related_ce_id else self.display_name}',
+            'ref': f'{ref_prefix}{effective_ce if self.x_related_ce_id else self.display_name}',
             'journal_id': self.journal_id.id,
             'partner_id': self.ce_partner_id.id if self.ce_partner_id else False,
             'date': self.date,

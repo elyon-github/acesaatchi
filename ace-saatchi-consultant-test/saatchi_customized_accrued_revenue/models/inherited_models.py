@@ -50,6 +50,14 @@ class SaleOrder(models.Model):
     # ========== Accrual Collection Methods ==========
 
     @api.model
+    def _normalize_ce_code_for_match(self, ce_code):
+        """Normalize CE code: remove whitespace, uppercase."""
+        if not ce_code:
+            return ''
+        import re
+        return re.sub(r'\s+', '', ce_code.strip().upper())
+
+    @api.model
     def collect_potential_accruals(self, accrual_date, reversal_date):
         """
         Collect sale orders eligible for accrual creation
@@ -57,17 +65,22 @@ class SaleOrder(models.Model):
         Criteria:
         - state = 'sale'
         - x_ce_status in ['signed', 'billable']
+        - ALSO: x_ce_status = 'for_client_signature' IF their old CE code
+          matches a CE# in the reversal opening balance model
 
         Args:
             accrual_date: Accrual period start date
             reversal_date: Accrual period end date
 
         Returns:
-            tuple: (potential_sos, duplicate_sos)
+            tuple: (potential_sos, duplicate_sos, client_sig_so_ids)
+                client_sig_so_ids: set of SO IDs that are Client Signature from reversal OB
         """
         potential = self.env['sale.order']
         duplicates = self.env['sale.order']
+        client_sig_so_ids = set()
 
+        # ── Standard: signed/billable SOs ──
         eligible_sos = self.search([
             ('state', '=', 'sale'),
             ('x_ce_status', 'in', ['signed', 'billable']),
@@ -87,7 +100,44 @@ class SaleOrder(models.Model):
             if existing:
                 duplicates |= so
 
-        return potential, duplicates
+        # ── Special: Client Signature SOs with old CE in reversal OB ──
+        client_sig_sos = self.search([
+            ('state', '=', 'sale'),
+            ('x_ce_status', '=', 'for_client_signature'),
+            ('x_ce_code', '!=', False)
+        ])
+
+        if client_sig_sos:
+            # Build normalized set of CE codes from reversal opening balances
+            reversal_ob_records = self.env[
+                'saatchi.accrued_revenue_reversal_opening_balance'
+            ].sudo().search([
+                ('company_id', '=', self.env.company.id)
+            ])
+            reversal_ob_ce_codes = set()
+            for rec in reversal_ob_records:
+                if rec.ce_code:
+                    reversal_ob_ce_codes.add(
+                        self._normalize_ce_code_for_match(rec.ce_code)
+                    )
+
+            for so in client_sig_sos:
+                old_ce = getattr(so, 'x_studio_old_ce', '')
+                if old_ce and self._normalize_ce_code_for_match(old_ce) in reversal_ob_ce_codes:
+                    potential |= so
+                    client_sig_so_ids.add(so.id)
+
+                    existing = self.env['saatchi.accrued_revenue'].search([
+                        ('x_related_ce_id', '=', so.id),
+                        ('date', '>=', accrual_date),
+                        ('date', '<=', reversal_date),
+                        ('state', 'in', ['draft', 'accrued', 'reversed'])
+                    ], limit=1)
+
+                    if existing:
+                        duplicates |= so
+
+        return potential, duplicates, client_sig_so_ids
 
     # ========== Wizard Action Methods ==========
 
@@ -197,7 +247,7 @@ class SaleOrder(models.Model):
 
         # Validate sale order state (skip if override or adjustment)
         if not is_override and not is_adjustment:
-            if self.state != 'sale' or self.x_ce_status not in ['signed', 'billable']:
+            if self.state != 'sale' or self.x_ce_status not in ['signed', 'billable', 'for_client_signature']:
                 _logger.warning(
                     f"SO {self.name} does not meet accrual criteria")
                 return False
@@ -317,11 +367,12 @@ class SaleOrder(models.Model):
             # Handle negative amounts (returns/adjustments)
             if accrued_amount < 0:
                 # Negative accrual: Dr. Revenue (reverse the credit)
+                effective_ce = self.x_studio_old_ce or self.x_ce_code
                 self.env['saatchi.accrued_revenue_lines'].create({
                     'accrued_revenue_id': accrued_revenue.id,
                     'ce_line_id': line.id,
                     'account_id': income_account.id,
-                    'label': f'{self.x_ce_code} - {line.name}',
+                    'label': f'{effective_ce} - {line.name}',
                     'debit': abs(accrued_amount),  # Debit the revenue account
                     'credit': 0.0,
                     'currency_id': line.currency_id.id,
@@ -329,11 +380,12 @@ class SaleOrder(models.Model):
                 })
             else:
                 # Positive accrual: Cr. Revenue (normal)
+                effective_ce = self.x_studio_old_ce or self.x_ce_code
                 self.env['saatchi.accrued_revenue_lines'].create({
                     'accrued_revenue_id': accrued_revenue.id,
                     'ce_line_id': line.id,
                     'account_id': income_account.id,
-                    'label': f'{self.x_ce_code} - {line.name}',
+                    'label': f'{effective_ce} - {line.name}',
                     'credit': accrued_amount,
                     'debit': 0.0,
                     'currency_id': line.currency_id.id,
@@ -465,6 +517,7 @@ class SaleOrder(models.Model):
 
     def action_view_accrued_revenues_journal_items(self):
         self.ensure_one()
+        effective_ce = self.x_studio_old_ce or self.x_ce_code
         list_view_id = self.env.ref(
             'saatchi_customized_accrued_revenue.view_accrued_revenue_journal_items_list').id
         search_view_id = self.env.ref(
@@ -476,7 +529,7 @@ class SaleOrder(models.Model):
             'view_mode': 'list,form',
             'views': [(list_view_id, 'list')],
             'search_view_id': search_view_id,  # Add comma here!
-            'domain': [('x_ce_code', '=', self.x_ce_code)],
+            'domain': [('x_ce_code', '=', effective_ce)],
             'context': {'journal_type': 'general', 'search_default_posted': 1},
         }
 
@@ -488,8 +541,9 @@ class SaleOrder(models.Model):
 
     def _compute_related_accrued_revenue_journal_items_count(self):
         for record in self:
+            effective_ce = record.x_studio_old_ce or record.x_ce_code
             record.related_accrued_revenue_journal_items_count = self.env['account.move.line'].search_count([
-                ('x_ce_code', '=', record.x_ce_code), ('x_type_of_entry', '!=', False)
+                ('x_ce_code', '=', effective_ce), ('x_type_of_entry', '!=', False)
             ])
 
 
@@ -700,12 +754,14 @@ class AccountMoveLine(models.Model):
                  'x_sales_order.date_order', 
                  'x_sales_order.x_ce_status')
     def _compute_ce_fields(self):
-        """Compute CE-related fields from linked sale order"""
+        """Compute CE-related fields from linked sale order. Prioritizes old CE code and date over new."""
         for line in self:
             so = line.x_sales_order
             if so:
-                line.x_ce_code = so.x_ce_code
-                line.x_ce_date = so.date_order
+                line.x_ce_code = so.x_studio_old_ce or so.x_ce_code
+                # Try to use old CE date if it exists (Studio field), fallback to date_order
+                old_ce_date = getattr(so, 'x_studio_old_ce_date', False)
+                line.x_ce_date = old_ce_date or so.date_order
                 line.x_ce_status = so.x_ce_status
                 line.x_client_product_ce_code = so.x_client_product_ce_code.x_product_id.id if so.x_client_product_ce_code and so.x_client_product_ce_code.x_product_id else False
             else:

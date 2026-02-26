@@ -427,7 +427,6 @@ class SalesOrderRevenueXLSX(models.AbstractModel):
         sheet.set_column(7, 7, 18)   # Manual Accrual
         sheet.set_column(8, 8, 18)   # Manual Reversal
         sheet.set_column(9, 9, 15)   # Total
-        sheet.set_column(10, 10, 20) # CE Status
 
         # Write report header
         row = 0
@@ -442,7 +441,7 @@ class SalesOrderRevenueXLSX(models.AbstractModel):
         headers = [
             'CLIENT', 'DESCRIPTION', 'Year', 'Month', 'BILLED',
             'SYSTEM ACCRUAL', 'SYSTEM REVERSAL', 'MANUAL ACCRUAL', 'MANUAL REVERSAL',
-            'TOTAL', 'CE STATUS'
+            'TOTAL'
         ]
 
         for col, header in enumerate(headers):
@@ -464,11 +463,10 @@ class SalesOrderRevenueXLSX(models.AbstractModel):
                 'manual_reversal': 0
             }
             
-            # Collect all descriptions, years, months, statuses, and sales orders
+            # Collect all descriptions, years, months, and sales orders
             descriptions = set()
             years = set()
             months = set()
-            statuses = set()
             all_sales_orders = set()
             
             for ce_code, ce_data in ces_data.items():
@@ -485,8 +483,6 @@ class SalesOrderRevenueXLSX(models.AbstractModel):
                     years.add(str(ce_data['year']))
                 if ce_data['month']:
                     months.add(ce_data['month'])
-                if ce_data['ce_status']:
-                    statuses.add(ce_data['ce_status'])
                 
                 # Collect all sales orders for this customer
                 all_sales_orders.update(ce_data['sales_orders'])
@@ -521,10 +517,6 @@ class SalesOrderRevenueXLSX(models.AbstractModel):
             excel_row = row + 1
             sheet.write_formula(
                 row, 9, f'=E{excel_row}+F{excel_row}+G{excel_row}+H{excel_row}+I{excel_row}', formats['currency'])
-
-            # Concatenate multiple statuses
-            status_str = ', '.join(sorted(statuses)) if statuses else ''
-            sheet.write(row, 10, status_str, formats['centered'])
 
             row += 1
 
@@ -577,9 +569,6 @@ class SalesOrderRevenueXLSX(models.AbstractModel):
             total_row, 8, f'=SUM(I{data_start_row + 1}:I{total_row})', currency_negative_bold_format)
         sheet.write_formula(
             total_row, 9, f'=SUM(J{data_start_row + 1}:J{total_row})', currency_bold_format)
-        
-        # Empty CE Status cell
-        sheet.write(total_row, 10, '', formats['section_header_no_border'])
 
         return True
 

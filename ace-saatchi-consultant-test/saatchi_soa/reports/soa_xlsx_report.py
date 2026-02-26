@@ -394,4 +394,122 @@ class SaatchiXLSX(models.AbstractModel):
                 # Add spacing before next currency table
                 current_row += 2
 
+                # ── PHP Conversion Table for foreign (non-PHP) currencies ──
+                if currency_code and currency_code != 'PHP':
+                    php_currency = self.env['res.currency'].search(
+                        [('name', '=', 'PHP')], limit=1)
+
+                    if php_currency:
+                        # PHP-specific formats
+                        php_symbol = php_currency.symbol or '₱'
+                        php_currency_fmt = self._create_currency_format(
+                            workbook, php_symbol, base_font)
+                        php_total_currency_fmt = self._create_total_currency_format(
+                            workbook, php_symbol, base_font)
+
+                        # Table header for PHP conversion
+                        header_end_row = self.generate_table_header(
+                            sheet, current_row, aging_months, 'PHP',
+                            partner_name, formats)
+
+                        # Initialize PHP totals
+                        php_totals = {
+                            'total': 0,
+                            'months': [0] * len(aging_months)
+                        }
+
+                        php_row = header_end_row + 1
+
+                        for move in moves_sorted:
+                            amount_orig = (
+                                move.amount_residual
+                                if move.move_type == 'out_invoice'
+                                else -move.amount_residual
+                            )
+
+                            # Determine conversion date from sale order's date_order
+                            conversion_date = None
+                            if move.x_sales_order and move.x_sales_order.date_order:
+                                conversion_date = move.x_sales_order.date_order.date() \
+                                    if hasattr(move.x_sales_order.date_order, 'date') \
+                                    else move.x_sales_order.date_order
+                            if not conversion_date:
+                                conversion_date = (
+                                    move.invoice_date
+                                    or move.date
+                                    or datetime.date.today()
+                                )
+
+                            # Convert using Odoo's currency conversion
+                            php_amount = currency._convert(
+                                amount_orig, php_currency,
+                                move.company_id,
+                                conversion_date)
+
+                            php_totals['total'] += php_amount
+
+                            # Bucket assignment (same as original table)
+                            due_date = (
+                                move.invoice_date_due
+                                or move.invoice_date
+                                or move.date
+                            )
+                            bucket_index = self._get_month_bucket(
+                                due_date, aging_months)
+
+                            if bucket_index is not None:
+                                php_totals['months'][bucket_index] += php_amount
+
+                            inv_date = move.invoice_date or move.date
+
+                            sale_order = (
+                                move.invoice_line_ids.mapped(
+                                    'sale_line_ids.order_id')[:1]
+                                if move.invoice_line_ids else False
+                            )
+                            ce_code = ''
+                            ce_code = (
+                                sale_order.x_ce_code
+                                or move.x_studio_old_ce_1
+                                or ''
+                            )
+
+                            # Write row data (PHP converted amounts)
+                            sheet.write(php_row, 0, move.ref or '',
+                                        formats['normal'])
+                            sheet.write(php_row, 1, ce_code,
+                                        formats['centered'])
+                            sheet.write(php_row, 2,
+                                        sale_order.x_job_description or ''
+                                        if sale_order else '',
+                                        formats['centered'])
+                            sheet.write(php_row, 3, move.name or '',
+                                        formats['centered'])
+                            sheet.write(php_row, 4, inv_date,
+                                        formats['date'])
+                            sheet.write(php_row, 5, php_amount,
+                                        php_currency_fmt)
+
+                            for i in range(len(aging_months)):
+                                if i == bucket_index:
+                                    sheet.write(php_row, 6 + i,
+                                                php_amount, php_currency_fmt)
+                                else:
+                                    sheet.write(php_row, 6 + i, '-',
+                                                formats['right_aligned'])
+
+                            sheet.set_row(php_row, 20)
+                            php_row += 1
+
+                        # PHP summary row
+                        php_formats = {
+                            **formats,
+                            'total_currency': php_total_currency_fmt
+                        }
+                        current_row = self.generate_summary(
+                            sheet, php_row, php_totals, aging_months,
+                            'PHP', php_formats)
+
+                        current_row += 2
+
         return True

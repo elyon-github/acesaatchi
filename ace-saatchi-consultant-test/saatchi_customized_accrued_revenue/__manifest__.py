@@ -15,7 +15,8 @@ Long description of module's purpose
     # Check https://github.com/odoo/odoo/blob/15.0/odoo/addons/base/data/ir_module_category_data.xml
     # for the full list
     'category': 'Uncategorized',
-    'version': '0.1',
+    'version': '18.0.0.1',
+    'license': 'LGPL-3',
 
     # any module necessary for this one to work correctly
     'depends': ['base','sale', 'account'],
@@ -26,9 +27,12 @@ Long description of module's purpose
         'security/accrual_config_rules.xml',
         'views/cleanup_old_actions.xml',
         'views/accrual_config_views.xml',
+        'views/opening_balance_views.xml',
+        'views/reversal_opening_balance_views.xml',
         'views/views.xml',
         'views/inherited_views.xml',
         'wizard/accrued_revenue_duplicate_checker_wizard_view.xml',
+        'security/reversal_opening_balance_security.xml',
         'data/data.xml'
     ],
     # only loaded in demonstration mode

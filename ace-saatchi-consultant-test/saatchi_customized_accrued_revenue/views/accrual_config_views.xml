@@ -15,6 +15,10 @@
                             <field name="accrued_revenue_account_id" domain="[('company_ids', 'in', company_id), ('deprecated', '=', False)]"/>
                             <field name="digital_income_account_id" domain="[('company_ids', 'in', company_id), ('deprecated', '=', False)]"/>
                         </group>
+                        <group string="Opening Balance Settings">
+                            <field name="opening_balance_cutoff_date"
+                                   help="Set the month-end date for which opening balances apply. Example: 2025-12-31 means the January 2026 report will use opening balances for Dec 31 balance column."/>
+                        </group>
                     </sheet>
                 </form>
             </field>
@@ -30,6 +34,7 @@
                     <field name="accrued_journal_id"/>
                     <field name="accrued_revenue_account_id"/>
                     <field name="digital_income_account_id"/>
+                    <field name="opening_balance_cutoff_date" optional="show"/>
                 </list>
             </field>
         </record>
@@ -47,7 +52,8 @@
             name="Accrual Configuration"
             parent="account.menu_finance_configuration"
             action="saatchi_accrual_config_action"
-            sequence="20"/>
+            sequence="20"
+            groups="__custom__.utility_group"/>
 
     </data>
 </odoo>
