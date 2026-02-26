@@ -125,6 +125,8 @@
             name="Accrual Reversal Opening Balances"
             parent="account.menu_finance_configuration"
             action="saatchi_reversal_opening_balance_action"
+            sequence="22"
+            groups="__custom__.utility_group"/>
             sequence="22"/>
 
     </data>

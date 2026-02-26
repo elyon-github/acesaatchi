@@ -120,7 +120,8 @@
             name="Accrual Opening Balances"
             parent="account.menu_finance_configuration"
             action="saatchi_opening_balance_action"
-            sequence="21"/>
+            sequence="21"
+            groups="__custom__.utility_group"/>
 
     </data>
 </odoo>

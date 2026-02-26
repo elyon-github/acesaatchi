@@ -52,7 +52,8 @@
             name="Accrual Configuration"
             parent="account.menu_finance_configuration"
             action="saatchi_accrual_config_action"
-            sequence="20"/>
+            sequence="20"
+            groups="__custom__.utility_group"/>
 
     </data>
 </odoo>
