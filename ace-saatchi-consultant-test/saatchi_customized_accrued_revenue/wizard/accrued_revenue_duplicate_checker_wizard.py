@@ -90,6 +90,9 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
             if record.accrual_date:
                 record.reversal_date = record.accrual_date + \
                     relativedelta(months=1, day=1)
+                # Re-collect potential accruals when date changes
+                if not record.special_case_mode:
+                    record._refresh_so_lines()
 
     # ========== Compute Methods ==========
 
@@ -102,6 +105,41 @@ class SaatchiAccruedRevenueWizard(models.TransientModel):
             )
 
     # ========== Default Methods ==========
+
+    def _refresh_so_lines(self):
+        """
+        Re-collect potential accruals and rebuild wizard lines.
+        Called when accrual_date changes so for_client_signature SOs
+        from reversal OB appear/disappear based on the cutoff date.
+        """
+        self.ensure_one()
+        if not self.accrual_date or not self.reversal_date:
+            return
+
+        potential_sos, duplicate_sos, client_sig_so_ids = self.env['sale.order'].collect_potential_accruals(
+            accrual_date=self.accrual_date,
+            reversal_date=self.reversal_date
+        )
+
+        # Build new lines list
+        new_lines = []
+        # Clear existing lines
+        new_lines.append((5, 0, 0))
+
+        for so in potential_sos:
+            amount_total = so._calculate_accrual_amount()
+            if amount_total:
+                has_duplicate = so in duplicate_sos
+                is_client_sig = so.id in client_sig_so_ids
+                new_lines.append((0, 0, {
+                    'sale_order_id': so.id,
+                    'has_existing_accrual': has_duplicate,
+                    'amount_total': amount_total,
+                    'create_accrual': not has_duplicate,
+                    'is_from_reversal_ob': is_client_sig,
+                }))
+
+        self.so_line_ids = new_lines
 
     def _default_accrual_date(self):
         """Default to last day of previous month"""
