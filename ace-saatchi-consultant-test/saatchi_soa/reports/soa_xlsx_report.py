@@ -332,9 +332,9 @@ class SaatchiXLSX(models.AbstractModel):
                 header_end_row = self.generate_table_header(
                     sheet, current_row, aging_months, currency_code, partner_name, formats)
 
-                # Sort moves by due date
+                # Sort moves by invoice name, then by due date
                 moves_sorted = sorted(
-                    moves, key=lambda x: x.invoice_date_due or x.invoice_date or x.date)
+                    moves, key=lambda x: (x.name or '', x.invoice_date_due or x.invoice_date or x.date))
 
                 # Initialize totals
                 totals = {
