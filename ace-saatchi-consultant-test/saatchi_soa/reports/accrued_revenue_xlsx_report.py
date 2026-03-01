@@ -609,6 +609,8 @@ class AccruedRevenueXLSX(models.AbstractModel):
 
         balances = defaultdict(float)
         db_ce_codes_normalized = set()  # Track which CE codes have DB history
+        cutoff_date = self._get_opening_balance_cutoff_date()
+        db_ce_codes_pre_cutoff = set()  # CE codes with DB history on or before cutoff
 
         for line in prev_lines:
             partner_name = (
@@ -621,12 +623,28 @@ class AccruedRevenueXLSX(models.AbstractModel):
             balances[(partner_name, ce_code)] += net_amount
 
             # Track normalized CE code so we know it has DB history
-            db_ce_codes_normalized.add(self._normalize_ce_code(ce_code))
+            norm = self._normalize_ce_code(ce_code)
+            db_ce_codes_normalized.add(norm)
 
-        # ── TIER 2: Opening Balance fallback ──
-        # Only apply if the previous month end matches the configured cutoff date
-        cutoff_date = self._get_opening_balance_cutoff_date()
-        if cutoff_date and prev_month_end == cutoff_date:
+            # Track CE codes with DB history on or before the cutoff date
+            if cutoff_date and line.date <= cutoff_date:
+                db_ce_codes_pre_cutoff.add(norm)
+
+        # ── TIER 2: Opening Balance + Reversal OB ──
+        # For the cutoff month (prev_month_end == cutoff_date):
+        #   Add OB for CE#s with no DB history at all.
+        # For subsequent months (prev_month_end > cutoff_date):
+        #   Add OB for CE#s with no pre-cutoff DB history.
+        #   Also add Reversal OB — these were used in January's reversal columns
+        #   but are NOT stored in the DB. Without them the balance chain breaks.
+        if cutoff_date and prev_month_end >= cutoff_date:
+            is_cutoff_month = (prev_month_end == cutoff_date)
+            # Decide which exclusion set to use:
+            # - Cutoff month: exclude CE#s with ANY DB history
+            # - Later months: exclude CE#s with pre-cutoff DB history only
+            exclude_set = db_ce_codes_normalized if is_cutoff_month else db_ce_codes_pre_cutoff
+
+            # Fetch regular OB
             try:
                 opening_records = self.env[
                     'saatchi.accrued_revenue_opening_balance'
@@ -634,23 +652,58 @@ class AccruedRevenueXLSX(models.AbstractModel):
                     balance_date=cutoff_date,
                     company_id=self.env.company.id
                 )
+            except Exception as e:
+                _logger.warning('Error fetching opening balances: %s', str(e))
+                opening_records = {}
 
-                for norm_ce_code, ob_data in opening_records.items():
-                    # Only use opening balance if this CE# has NO DB history
-                    if norm_ce_code not in db_ce_codes_normalized:
-                        partner_name = (ob_data.get('partner_name') or 'UNKNOWN').upper()
-                        ce_code_display = (ob_data.get('ce_code_display') or 'NO_CE').upper()
-                        balances[(partner_name, ce_code_display)] += ob_data.get('balance', 0)
+            # Fetch reversal OB (only needed for months AFTER cutoff)
+            reversal_ob_records = {}
+            if not is_cutoff_month:
+                try:
+                    reversal_ob_records = self.env[
+                        'saatchi.accrued_revenue_reversal_opening_balance'
+                    ].get_reversal_opening_balances_for_month(
+                        balance_date=cutoff_date,
+                        company_id=self.env.company.id
+                    )
+                except Exception as e:
+                    _logger.warning('Error fetching reversal OB: %s', str(e))
+
+            # Add regular OB amounts
+            for norm_ce_code, ob_data in opening_records.items():
+                if norm_ce_code not in exclude_set:
+                    partner_name = (ob_data.get('partner_name') or 'UNKNOWN').upper()
+                    ce_code_display = (ob_data.get('ce_code_display') or 'NO_CE').upper()
+                    balances[(partner_name, ce_code_display)] += ob_data.get('balance', 0)
+
+                    _logger.debug(
+                        'OB for CE# %s: %.2f (prev_month_end=%s)',
+                        ce_code_display, ob_data.get('balance', 0), prev_month_end
+                    )
+
+            # Add reversal OB amounts (for months after cutoff only)
+            # These represent the reversal impact from the cutoff month that is NOT in DB.
+            # Signs: system_reversal and manual_reversal are typically negative (credits).
+            # manual_reversal_adjustment is subtracted in the report (makes reversal more negative).
+            for norm_ce_code, rev_data in reversal_ob_records.items():
+                if norm_ce_code not in exclude_set:
+                    rev_system = rev_data.get('system_reversal', 0)
+                    rev_manual = rev_data.get('manual_reversal', 0)
+                    rev_adj = rev_data.get('manual_reversal_adjustment', 0)
+                    # Match report formula: reversal columns add to balance,
+                    # adjustment is subtracted from manual_reversal
+                    rev_total = rev_system + rev_manual - rev_adj
+
+                    if rev_total != 0:
+                        # Find matching partner/CE from regular OB or reversal OB
+                        partner_name = (rev_data.get('partner_name') or 'UNKNOWN').upper()
+                        ce_code_display = (rev_data.get('ce_code_display') or 'NO_CE').upper()
+                        balances[(partner_name, ce_code_display)] += rev_total
 
                         _logger.debug(
-                            'Using opening balance for CE# %s: %.2f',
-                            ce_code_display, ob_data.get('balance', 0)
+                            'Reversal OB for CE# %s: %.2f (prev_month_end=%s)',
+                            ce_code_display, rev_total, prev_month_end
                         )
-            except Exception as e:
-                _logger.warning(
-                    'Error fetching opening balances for %s: %s',
-                    prev_month_end, str(e)
-                )
 
         return balances
 
@@ -865,11 +918,15 @@ class AccruedRevenueXLSX(models.AbstractModel):
         # Group lines by client and CE# for this specific month
         grouped_data = self._group_lines_by_ce(filtered_lines, accrual_month)
 
-        # If this is the opening balance month, merge OB-only rows
-        # Reversal OB rows are merged FIRST (higher priority), then first OB rows
-        if self._is_opening_balance_month(accrual_month):
-            self._merge_reversal_opening_balance_rows(grouped_data)
-            self._merge_opening_balance_rows(grouped_data)
+        # If this is the opening balance month OR any month after cutoff,
+        # merge OB-only rows so CE#s from the OB continue to appear.
+        # Reversal OB rows are merged FIRST (higher priority), then first OB rows.
+        cutoff_date = self._get_opening_balance_cutoff_date()
+        if cutoff_date:
+            prev_month_end = accrual_month - relativedelta(days=1)
+            if prev_month_end >= cutoff_date:
+                self._merge_reversal_opening_balance_rows(grouped_data)
+                self._merge_opening_balance_rows(grouped_data)
 
         # Skip this month if no data (even after OB merge)
         if not grouped_data:
@@ -957,7 +1014,7 @@ class AccruedRevenueXLSX(models.AbstractModel):
                     # Only mark red if CE doesn't exist in any sale order
                     is_ob_only_row = not so_match
 
-                sheet.write(row, 0, partner_name, formats['normal_wrap'])
+                sheet.write(row, 0, partner_name, formats['normal'])
                 
                 # Determine CE# format based on OB and reversal OB presence
                 ce_format = formats['centered']
@@ -988,16 +1045,23 @@ class AccruedRevenueXLSX(models.AbstractModel):
 
                 # Get previous month ending balance.
                 # First try exact match, then fall back to normalized CE# matching.
+                # SUM all matching entries (OB and DB may have different partner keys).
                 prev_balance = prev_month_balances.get(
                     (partner_name, ce_code), None)
 
-                if prev_balance is None:
-                    # Fallback: try normalized CE# matching across all entries
-                    norm_ce = self._normalize_ce_code(ce_code)
-                    for (bal_partner, bal_ce), bal_amount in prev_month_balances.items():
-                        if self._normalize_ce_code(bal_ce) == norm_ce:
-                            prev_balance = bal_amount
-                            break
+                # Always do normalized CE# matching to catch entries with different
+                # partner names (e.g., OB partner vs DB journal partner).
+                # Sum ALL entries with the same normalized CE code.
+                norm_ce = self._normalize_ce_code(ce_code)
+                total_from_all_keys = 0
+                found_any = False
+                for (bal_partner, bal_ce), bal_amount in prev_month_balances.items():
+                    if self._normalize_ce_code(bal_ce) == norm_ce:
+                        total_from_all_keys += bal_amount
+                        found_any = True
+
+                if found_any:
+                    prev_balance = total_from_all_keys
 
                 prev_balance = prev_balance or 0
                 sheet.write(row, 6, prev_balance, formats['currency'])

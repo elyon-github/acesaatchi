@@ -109,10 +109,17 @@ class SaleOrder(models.Model):
 
         if client_sig_sos:
             # Build normalized set of CE codes from reversal opening balances
+            # Only include records whose balance_date matches the OPENING BALANCE MONTH
+            # Opening balance month = cutoff_date + 1 month (first accrual after cutoff)
+            # So for cutoff 12/31/2025, only include when accrual_date is 01/31/2026 (prev month = 12/31)
+            first_of_accrual_month = accrual_date.replace(day=1)
+            prev_month_end = first_of_accrual_month - relativedelta(days=1)
+            
             reversal_ob_records = self.env[
                 'saatchi.accrued_revenue_reversal_opening_balance'
             ].sudo().search([
-                ('company_id', '=', self.env.company.id)
+                ('company_id', '=', self.env.company.id),
+                ('balance_date', '=', prev_month_end),
             ])
             reversal_ob_ce_codes = set()
             for rec in reversal_ob_records:
@@ -127,6 +134,43 @@ class SaleOrder(models.Model):
                     potential |= so
                     client_sig_so_ids.add(so.id)
 
+                    existing = self.env['saatchi.accrued_revenue'].search([
+                        ('x_related_ce_id', '=', so.id),
+                        ('date', '>=', accrual_date),
+                        ('date', '<=', reversal_date),
+                        ('state', 'in', ['draft', 'accrued', 'reversed'])
+                    ], limit=1)
+
+                    if existing:
+                        duplicates |= so
+
+        # ── Continuation: Client Signature SOs that had accruals in previous month ──
+        # For months AFTER the cutoff month, pick up for_client_signature SOs
+        # that already have an accrual record from the previous month.
+        # This keeps them in the cycle once they entered via reversal OB.
+        if client_sig_sos:
+            first_of_accrual_month = accrual_date.replace(day=1)
+            prev_month_start = (first_of_accrual_month - relativedelta(months=1))
+            prev_month_end = first_of_accrual_month - relativedelta(days=1)
+
+            for so in client_sig_sos:
+                if so in potential:
+                    # Already included (e.g., from reversal OB tier above)
+                    continue
+
+                # Check if this SO had an accrual in the previous month
+                prev_accrual = self.env['saatchi.accrued_revenue'].search([
+                    ('x_related_ce_id', '=', so.id),
+                    ('date', '>=', prev_month_start),
+                    ('date', '<=', prev_month_end),
+                    ('state', 'in', ['draft', 'accrued', 'reversed'])
+                ], limit=1)
+
+                if prev_accrual:
+                    potential |= so
+                    client_sig_so_ids.add(so.id)
+
+                    # Check for duplicates in current period
                     existing = self.env['saatchi.accrued_revenue'].search([
                         ('x_related_ce_id', '=', so.id),
                         ('date', '>=', accrual_date),
