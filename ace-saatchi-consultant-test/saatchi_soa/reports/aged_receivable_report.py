@@ -248,12 +248,13 @@ class AgedReceivablesXLSX(models.AbstractModel):
         sheet.set_column(2, 2, 40)   # CLIENT
         sheet.set_column(3, 3, 15)   # INVOICE #
         sheet.set_column(4, 4, 12)   # DATE
-        sheet.set_column(5, 5, 15)   # AMOUNT
-        sheet.set_column(6, 6, 15)   # 0-30
-        sheet.set_column(7, 7, 15)   # 31-60
-        sheet.set_column(8, 8, 15)   # 61-90
-        sheet.set_column(9, 9, 15)   # 91-120
-        sheet.set_column(10, 10, 15) # OVER 120
+        sheet.set_column(5, 5, 15)   # FOREIGN AMOUNT
+        sheet.set_column(6, 6, 15)   # AMOUNT (PHP)
+        sheet.set_column(7, 7, 15)   # 0-30
+        sheet.set_column(8, 8, 15)   # 31-60
+        sheet.set_column(9, 9, 15)   # 61-90
+        sheet.set_column(10, 10, 15) # 91-120
+        sheet.set_column(11, 11, 15) # OVER 120
 
         # Write header row
         row = 0
@@ -264,13 +265,17 @@ class AgedReceivablesXLSX(models.AbstractModel):
         sheet.write(row, 2, 'CLIENT', formats['yellow_header'])
         sheet.write(row, 3, 'INVOICE #', formats['yellow_header'])
         sheet.write(row, 4, 'DATE', formats['yellow_header'])
-        sheet.write(row, 5, 'AMOUNT', formats['yellow_header'])
+        sheet.write(row, 5, 'FOREIGN AMOUNT', formats['yellow_header'])
+        sheet.write(row, 6, 'AMOUNT', formats['yellow_header'])
         
         for i, label in enumerate(aging_labels):
-            sheet.write(row, 6 + i, label, formats['yellow_header'])
+            sheet.write(row, 7 + i, label, formats['yellow_header'])
 
         sheet.set_row(row, 20)
         row += 1
+
+        # Freeze the header row
+        sheet.freeze_panes(1, 0)
 
         # Sort partners alphabetically
         sorted_partners = sorted(by_partner.items())
@@ -288,11 +293,14 @@ class AgedReceivablesXLSX(models.AbstractModel):
         currency_format = self._create_currency_format(workbook, php_symbol, base_font)
         subtotal_currency_format = self._create_subtotal_currency_format(workbook, php_symbol, base_font)
         grand_total_currency_format = self._create_grand_total_currency_format(workbook, php_symbol, base_font)
+        
+        # Dictionary to cache currency formats for foreign currencies
+        foreign_currency_formats = {}
 
         # Process each partner
         for partner_name, moves in sorted_partners:
-            # Sort moves by date
-            moves_sorted = sorted(moves, key=lambda x: x.invoice_date or x.date)
+            # Sort moves by invoice name, then by invoice date
+            moves_sorted = sorted(moves, key=lambda x: (x.name or '', x.invoice_date or x.date))
 
             # Initialize subtotals for this partner (in PHP)
             subtotals = {
@@ -305,8 +313,10 @@ class AgedReceivablesXLSX(models.AbstractModel):
                 # Get original amount
                 original_amount = move.amount_residual if move.move_type == 'out_invoice' else -move.amount_residual
                 
-                # Use x_alt_currency_amount if currency differs from company currency, otherwise use original amount
+                # Determine foreign amount (non-PHP) and PHP amount
+                foreign_amount = None
                 if move.currency_id != php_currency:
+                    foreign_amount = original_amount
                     amount = move.x_alt_currency_amount if hasattr(move, 'x_alt_currency_amount') else original_amount
                 else:
                     amount = original_amount
@@ -346,31 +356,47 @@ class AgedReceivablesXLSX(models.AbstractModel):
                 # elif sale_order:
                     # ce_date = sale_order.date_order or ce_date
 
-                # Write row data (all amounts in PHP)
+                # Write row data
                 sheet.write(row, 0, move.ref or '', formats['normal'])  # PO#
                 sheet.write(row, 1, ce_code, formats['centered'])  # CE#
                 sheet.write(row, 2, partner_name, formats['normal'])  # CLIENT
                 sheet.write(row, 3, move.name or '', formats['centered'])  # INVOICE #
                 # sheet.write(row, 4, ce_date, formats['date'])  # DATE
                 sheet.write(row, 4, inv_date, formats['date'])  # DATE - change to actual invoice date
-                sheet.write(row, 5, amount, currency_format)  # AMOUNT (in PHP)
+                
+                # Write foreign amount (only if not PHP)
+                if foreign_amount is not None:
+                    # Get currency symbol from the invoice's currency
+                    currency_symbol = move.currency_id.symbol or move.currency_id.name
+                    
+                    # Create or retrieve cached format for this currency
+                    if currency_symbol not in foreign_currency_formats:
+                        foreign_currency_formats[currency_symbol] = self._create_currency_format(
+                            workbook, currency_symbol, base_font)
+                    
+                    sheet.write(row, 5, foreign_amount, foreign_currency_formats[currency_symbol])  # FOREIGN AMOUNT
+                else:
+                    sheet.write(row, 5, '-', formats['right_aligned'])  # FOREIGN AMOUNT (dash if PHP)
+                
+                sheet.write(row, 6, amount, currency_format)  # AMOUNT (in PHP)
 
                 # Aging buckets - only populate the matching bucket
                 for i in range(5):
                     if i == bucket_index:
-                        sheet.write(row, 6 + i, amount, currency_format)
+                        sheet.write(row, 7 + i, amount, currency_format)
                     else:
-                        sheet.write(row, 6 + i, '-', formats['right_aligned'])
+                        sheet.write(row, 7 + i, '-', formats['right_aligned'])
 
                 sheet.set_row(row, 18)
                 row += 1
 
             # Write subtotal row for this partner
             sheet.merge_range(row, 0, row, 4, f'Total | {partner_name}', formats['subtotal_label'])
-            sheet.write(row, 5, subtotals['total'], subtotal_currency_format)
+            sheet.write(row, 5, '-', formats['subtotal_cell'])  # FOREIGN AMOUNT (dash)
+            sheet.write(row, 6, subtotals['total'], subtotal_currency_format)
 
             for i in range(5):
-                sheet.write(row, 6 + i, subtotals['buckets'][i], subtotal_currency_format)
+                sheet.write(row, 7 + i, subtotals['buckets'][i], subtotal_currency_format)
 
             sheet.set_row(row, 18)
             row += 1
@@ -382,10 +408,11 @@ class AgedReceivablesXLSX(models.AbstractModel):
         sheet.write(row, 2, '', formats['grand_total'])
         sheet.write(row, 3, '', formats['grand_total'])
         sheet.write(row, 4, '', formats['grand_total'])
-        sheet.write(row, 5, grand_totals['total'], grand_total_currency_format)
+        sheet.write(row, 5, '-', formats['grand_total'])  # FOREIGN AMOUNT (dash)
+        sheet.write(row, 6, grand_totals['total'], grand_total_currency_format)
 
         for i in range(5):
-            sheet.write(row, 6 + i, grand_totals['buckets'][i], grand_total_currency_format)
+            sheet.write(row, 7 + i, grand_totals['buckets'][i], grand_total_currency_format)
 
         sheet.set_row(row, 20)
 
